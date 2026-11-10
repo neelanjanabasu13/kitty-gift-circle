@@ -1,110 +1,135 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
-import { ArrowRight, Settings2, HandCoins, PackageCheck, ShieldCheck } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo, PayPalTrust } from "@/components/kitty/Logo";
+import { PayPalWordmark, TopBar } from "@/components/kitty/Logo";
+import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
+import { PotMeter } from "@/components/kitty/PotMeter";
+import { PickCard } from "@/components/kitty/PickCard";
+import casserole from "@/assets/pick-casserole.jpg";
+import pourover from "@/assets/pick-pourover.jpg";
+import pasta from "@/assets/pick-pasta.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Kitty: the group gift that buys itself" },
-      { name: "description", content: "Set it up once. Kitty collects, chooses and buys. Nobody's charged unless the gift happens." },
+      { name: "description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
       { property: "og:title", content: "Kitty: the group gift that buys itself" },
-      { property: "og:description", content: "One link for everyone to chip in. Kitty finds a gift that fits, and nobody's charged unless it happens." },
+      { property: "og:description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
     ],
   }),
   component: Landing,
 });
 
-const steps = [
-  { icon: Settings2, title: "Set it up", body: "Tell Kitty who it's for and what they love. Tap a few chips, done in a minute." },
-  { icon: HandCoins, title: "Everyone chips in", body: "One link, no accounts. Each person places a PayPal hold, never a charge." },
-  { icon: PackageCheck, title: "Kitty buys it", body: "It finds real gifts that fit the person and the pot, lets you vote, then buys." },
-];
-
 function Landing() {
+  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const go = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate({ to: "/start", search: { name: name.trim() || undefined } });
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-warm">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
-        <Logo />
-        <Button asChild variant="soft" size="sm" className="h-9 px-4">
-          <Link to="/start">Start a kitty</Link>
-        </Button>
-      </header>
+    <div className="min-h-screen">
+      <TopBar right={<Button asChild variant="ink" size="tap"><Link to="/start" search={{ name: undefined }}>Start a kitty</Link></Button>} />
 
-      <main className="mx-auto max-w-5xl px-5 pb-16">
-        <section className="grid items-center gap-10 pt-6 md:grid-cols-2 md:pt-16">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-accent-foreground">
-              <ShieldCheck className="size-3.5" /> Holds, not charges
-            </p>
-            <h1 className="font-display text-[44px] leading-[1.02] font-semibold md:text-6xl">The group gift that buys itself.</h1>
-            <p className="mt-5 max-w-md text-lg text-muted-foreground">Set it up once. Kitty collects, chooses and buys. Nobody's charged unless the gift happens.</p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button asChild variant="hero" size="xl">
-                <Link to="/start">
-                  Start a kitty <ArrowRight className="size-5" />
-                </Link>
-              </Button>
-              <PayPalTrust className="sm:justify-start" />
-            </div>
-          </motion.div>
-
-          <HeroCard />
+      <main>
+        <section className="mx-auto max-w-3xl px-5 pt-16 pb-14 text-center md:pt-28">
+          <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-[44px] md:text-[72px]">
+            The group gift that <em>buys itself</em>.
+          </motion.h1>
+          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
+            Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens.
+          </motion.p>
+          <motion.form onSubmit={go} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="mx-auto mt-10 flex h-14 max-w-lg items-center gap-2 rounded-full border bg-card pr-1.5 pl-6 shadow-bar focus-within:border-foreground/30">
+            <label htmlFor="who" className="sr-only">Who's the gift for?</label>
+            <input id="who" value={name} onChange={(e) => setName(e.target.value)} placeholder="Who's the gift for?" maxLength={60} autoComplete="off" className="h-full min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-muted-foreground" />
+            <button type="submit" aria-label="Start" className="grid size-11 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform hover:-translate-y-px">
+              <ArrowUp className="size-5" />
+            </button>
+          </motion.form>
         </section>
 
-        <section className="mt-20">
-          <h2 className="font-display text-3xl font-semibold">A whip-round link collects. Kitty finishes the job.</h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {steps.map((s, i) => (
-              <motion.div key={s.title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} className="kitty-card p-6">
-                <div className="flex items-center gap-3">
-                  <span className="grid size-10 place-items-center rounded-full bg-gradient-plum text-primary-foreground"><s.icon className="size-5" /></span>
-                  <span className="font-display text-sm text-muted-foreground">Step {i + 1}</span>
-                </div>
-                <h3 className="mt-4 font-display text-xl font-semibold">{s.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{s.body}</p>
-              </motion.div>
+        <LiveDemo />
+
+        <section className="mx-auto max-w-5xl px-5 py-20">
+          <ol className="grid gap-8 border-t pt-10 md:grid-cols-3">
+            {[
+              ["Set it up once.", "Tell Kitty who it's for and what they love. A minute of tapping."],
+              ["Everyone chips in.", "One link, no accounts. Each person places a PayPal hold, not a charge."],
+              ["Kitty buys it.", "It finds real gifts that fit the person and the pot, then buys the best one."],
+            ].map(([t, b], i) => (
+              <li key={t}>
+                <p className="font-mono text-[12px] text-muted-foreground">0{i + 1}</p>
+                <p className="mt-2 font-display text-[28px] leading-tight">{t}</p>
+                <p className="mt-2 text-[15px] text-muted-foreground">{b}</p>
+              </li>
             ))}
+          </ol>
+        </section>
+
+        <section className="border-y bg-card">
+          <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 px-5 py-6 text-center md:flex-row md:text-left">
+            <p className="text-[15px]">Holds through PayPal. Released automatically if the gift falls through.</p>
+            <PayPalWordmark className="text-[20px]" />
           </div>
         </section>
-
-        <section className="mt-16 rounded-[2rem] bg-gradient-plum p-8 text-primary-foreground md:p-12">
-          <h2 className="font-display text-3xl font-semibold md:text-4xl">If the gift falls through, every hold just drops off.</h2>
-          <p className="mt-3 max-w-xl opacity-85">Every contribution is a PayPal authorisation. Money only moves when Kitty actually buys the gift, so nobody's left chasing refunds.</p>
-          <Button asChild variant="secondary" size="xl" className="mt-6 rounded-full">
-            <Link to="/start">Start a kitty</Link>
-          </Button>
-        </section>
       </main>
-      <footer className="pb-10"><PayPalTrust /></footer>
+
+      <footer className="mx-auto flex max-w-6xl items-center justify-between px-5 py-8 text-[13px] text-muted-foreground md:px-8">
+        <span>Kitty</span>
+        <span>Made for group gifts</span>
+      </footer>
     </div>
   );
 }
 
-function HeroCard() {
-  const faces = ["AM", "JP", "RK", "SL", "?"];
+// ---------- Looping demo: chip-ins arrive, meter fills, picks re-rank, Kitty narrates ----------
+const PICKS = [
+  { id: "a", title: "Le Creuset round casserole, 22cm", retailer: "John Lewis", category: "Cooking", price: 118, image_url: casserole, reason: "She cooks every Sunday and loves a good pot." },
+  { id: "b", title: "Hand-thrown pour-over coffee set", retailer: "Etsy", category: "Ceramics", price: 64, image_url: pourover, reason: "Coffee and pottery, both on her list." },
+  { id: "c", title: "Pasta-making class for two", retailer: "Obby", category: "Experiences", price: 95, image_url: pasta, reason: "An evening out that still feels like cooking." },
+];
+const SCRIPT: { raised: number; people: number; line: string; order: string[]; working: string }[] = [
+  { raised: 72, people: 6, line: "Priya's pot opened by Sam. Kitty noted: cooking, ceramics, coffee.", order: ["b", "c", "a"], working: "Searching 5 shops for cooking gifts under £72..." },
+  { raised: 87, people: 7, line: "Jo chipped in £15. Held, not charged.", order: ["b", "c", "a"], working: "Checking stock and delivery for 9 candidates..." },
+  { raised: 97, people: 8, line: "Someone chipped in £10. 2 more votes for cooking.", order: ["c", "b", "a"], working: "Re-ranking with the group's votes..." },
+  { raised: 112, people: 9, line: "Ravi chipped in £15. The casserole is nearly in reach.", order: ["c", "a", "b"], working: "Searching 5 shops for cooking gifts under £112..." },
+  { raised: 120, people: 10, line: "Target reached. Le Creuset casserole moves to the top.", order: ["a", "c", "b"], working: "Lining up the final vote..." },
+];
+
+function LiveDemo() {
+  const reduce = useReducedMotion();
+  const [step, setStep] = useState(reduce ? SCRIPT.length - 1 : 0);
+  useEffect(() => {
+    if (reduce) return;
+    const t = setInterval(() => setStep((s) => (s + 1) % SCRIPT.length), 2800);
+    return () => clearInterval(t);
+  }, [reduce]);
+  const cur = SCRIPT[step]!;
+  const now = Date.now();
+  const lines: AgentLine[] = SCRIPT.slice(0, step + 1).reverse().map((s, i) => ({ id: s.line, at: new Date(now - (i * 47 + 3) * 1000).toISOString(), message: s.line }));
+  const picks = cur.order.map((id, i) => ({ ...PICKS.find((p) => p.id === id)!, rank: i + 1 }));
+
   return (
-    <motion.div initial={{ opacity: 0, y: 24, rotate: 1 }} animate={{ opacity: 1, y: 0, rotate: -1.5 }} transition={{ duration: 0.6, delay: 0.1 }} className="kitty-card mx-auto w-full max-w-sm p-6 shadow-lift">
-      <p className="text-sm text-muted-foreground">Chipping in for</p>
-      <p className="font-display text-2xl font-semibold">Priya's leaving do</p>
-      <div className="mt-5 flex items-baseline justify-between">
-        <p className="font-display text-3xl font-semibold">£112 <span className="font-sans text-sm font-normal text-muted-foreground">of £120</span></p>
-        <span className="rounded-full bg-held-soft px-2.5 py-1 text-xs font-semibold text-held">held</span>
+    <section aria-label="Kitty in action" className="mx-auto grid max-w-6xl gap-6 px-5 md:px-8 lg:grid-cols-2 lg:gap-10">
+      <AgentFeed lines={lines.slice(0, 5)} working={cur.working} className="lg:order-1" />
+      <div className="surface space-y-6 p-5 md:p-6 lg:order-2">
+        <div>
+          <p className="text-[13px] text-muted-foreground">Chipping in for</p>
+          <p className="font-display text-[28px] leading-tight">Priya's leaving do</p>
+        </div>
+        <PotMeter raised={cur.raised} target={120} currency="GBP" people={cur.people} size="sm" footer={<div className="flex -space-x-1.5">{["AM", "JP", "RK", "SL"].map((f) => <span key={f} className="grid size-7 place-items-center rounded-full border-2 border-card bg-muted text-[10px] font-medium">{f}</span>)}</div>} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {picks.map((p, i) => (
+            <div key={p.id} className={i > 0 ? "hidden sm:block" : ""}>
+              <PickCard currency="GBP" pick={{ ...p, reason: i === 0 ? p.reason : null }} />
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted">
-        <motion.div className="h-full rounded-full bg-gradient-meter" initial={{ width: 0 }} animate={{ width: "93%" }} transition={{ delay: 0.5, duration: 1.4, ease: "easeOut" }} />
-      </div>
-      <div className="mt-5 flex -space-x-2">
-        {faces.map((f) => (
-          <span key={f} className="grid size-9 place-items-center rounded-full border-2 border-card bg-primary-soft text-xs font-semibold text-accent-foreground">{f}</span>
-        ))}
-        <span className="grid size-9 place-items-center rounded-full border-2 border-card bg-muted text-xs text-muted-foreground">+4</span>
-      </div>
-      <div className="mt-5 rounded-2xl bg-secondary p-4">
-        <p className="text-xs font-semibold text-accent-foreground">Kitty's top pick</p>
-        <p className="mt-1 text-sm">Hand-thrown ceramic pour-over set, because Priya loves coffee and pottery.</p>
-      </div>
-    </motion.div>
+    </section>
   );
 }

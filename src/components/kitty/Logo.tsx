@@ -1,32 +1,57 @@
 import { Link } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 
-export function KittyMark({ className = "size-8" }: { className?: string }) {
-  // Coin jar with cat ears
+export function KittyMark({ className = "size-7", live = false }: { className?: string; live?: boolean }) {
+  // Coin jar with cat ears, drawn in currentColor
   return (
-    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-      <path d="M9 12 L12 4 L17 10 Z M31 12 L28 4 L23 10 Z" className="fill-primary" />
-      <rect x="7" y="10" width="26" height="26" rx="10" className="fill-primary" />
-      <rect x="15" y="15" width="10" height="2.6" rx="1.3" className="fill-primary-foreground" opacity="0.9" />
-      <circle cx="20" cy="26" r="5" className="fill-primary-foreground" opacity="0.18" />
-      <circle cx="20" cy="26" r="3" className="fill-primary-foreground" />
-    </svg>
+    <span className="relative inline-flex">
+      <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+        <path d="M9 13 L12 4 L18 10 Z M31 13 L28 4 L22 10 Z" fill="currentColor" />
+        <rect x="7" y="10" width="26" height="26" rx="9" fill="currentColor" />
+        <rect x="15" y="15.5" width="10" height="2.4" rx="1.2" fill="var(--color-background)" />
+        <circle cx="20" cy="26" r="3.2" fill="var(--color-background)" />
+      </svg>
+      {live && (
+        <span className="absolute -right-0.5 -bottom-0.5 size-2.5">
+          <span className="absolute inset-0 rounded-full bg-ember breathe" />
+          <span className="absolute inset-0 rounded-full bg-ember" />
+        </span>
+      )}
+    </span>
   );
 }
 
 export function Logo() {
   return (
-    <Link to="/" className="inline-flex items-center gap-2" aria-label="Kitty home">
-      <KittyMark className="size-8" />
-      <span className="font-display text-2xl font-semibold tracking-tight text-foreground">Kitty</span>
+    <Link to="/" className="inline-flex min-h-11 items-center gap-2 text-foreground" aria-label="Kitty home">
+      <KittyMark className="size-6" />
+      <span className="font-display text-[26px] leading-none tracking-[-0.03em]">Kitty</span>
     </Link>
+  );
+}
+
+export function PayPalWordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`font-sans font-bold italic tracking-tight ${className}`} aria-label="PayPal">
+      <span className="text-foreground">Pay</span><span className="text-held">Pal</span>
+    </span>
   );
 }
 
 export function PayPalTrust({ className = "" }: { className?: string }) {
   return (
-    <p className={`flex items-center justify-center gap-1.5 text-xs text-muted-foreground ${className}`}>
-      <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"><path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z" /></svg>
-      Powered by PayPal. Holds, not charges.
+    <p className={`flex items-center justify-center gap-1.5 text-[13px] text-muted-foreground ${className}`}>
+      <Lock className="size-3.5" aria-hidden="true" />
+      Held, not charged. Released if it falls through.
     </p>
+  );
+}
+
+export function TopBar({ right }: { right?: React.ReactNode }) {
+  return (
+    <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-3 md:px-8">
+      <Logo />
+      {right}
+    </header>
   );
 }

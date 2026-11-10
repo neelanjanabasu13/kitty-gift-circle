@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Check, Copy, KeyRound, MessageCircle, BellRing } from "lucide-react";
+import { Check, Copy, Lock, Mail, MessageCircle, Hash } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Logo } from "@/components/kitty/Logo";
+import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
+import { AgentTicker } from "@/components/kitty/AgentFeed";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
-import { shareMessage } from "@/lib/kitty";
+import { formatMoney, shareMessage } from "@/lib/kitty";
 import { setReminders } from "@/lib/kitty.functions";
 
 export const Route = createFileRoute("/k/$slug_/share")({
@@ -27,36 +28,12 @@ export const Route = createFileRoute("/k/$slug_/share")({
   component: SharePage,
 });
 
-function CopyRow({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="space-y-2">
-      <p className="flex items-center gap-1.5 text-sm font-semibold">{icon}{label}</p>
-      <div className="flex items-center gap-2 rounded-2xl border bg-secondary p-1.5 pl-4">
-        <span className="min-w-0 flex-1 truncate text-sm">{value}</span>
-        <Button
-          variant="hero"
-          size="sm"
-          className="h-10 px-4"
-          onClick={async () => {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-            toast.success("Copied");
-            setTimeout(() => setCopied(false), 1600);
-          }}
-        >
-          {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function SharePage() {
   const { slug } = Route.useParams();
   const { t } = Route.useSearch();
   const { data } = useLivePot(slug, t);
   const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
   const [reminders, setRem] = useState(data?.pot.reminders_enabled ?? true);
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -66,55 +43,70 @@ function SharePage() {
   const link = `${origin}/k/${slug}`;
   const manage = `${origin}/k/${slug}/manage?t=${t}`;
   const msg = shareMessage(data.pot.recipient_name, data.pot.occasion, link);
+  const copy = async (v: string, label = "Copied") => {
+    await navigator.clipboard.writeText(v);
+    toast.success(label);
+  };
+  const ticker = data.people === 0 ? "Waiting for the first chip-in." : `${data.people} in so far. ${formatMoney(data.raised, data.pot.currency)} held.`;
 
   return (
-    <div className="min-h-screen bg-gradient-warm">
-      <header className="mx-auto max-w-xl px-5 py-5"><Logo /></header>
-      <main className="mx-auto max-w-xl space-y-5 px-5 pb-16">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <p className="text-sm font-semibold text-primary">Kitty's live for {data.pot.recipient_name}</p>
-          <h1 className="mt-1 font-display text-4xl font-semibold">One link. Kitty handles the rest.</h1>
+    <div className="min-h-screen">
+      <TopBar />
+      <main className="mx-auto max-w-2xl space-y-10 px-5 pt-10 pb-20">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          <h1 className="text-[44px] md:text-[64px]">One link. <em>Kitty</em> handles the rest.</h1>
+          <AgentTicker text={ticker} className="max-w-md" />
         </motion.div>
 
-        <section className="kitty-card space-y-5 p-5">
-          <CopyRow label="Share link" value={link} icon={null} />
-          <div className="rounded-2xl bg-primary-soft p-4 text-sm leading-relaxed text-accent-foreground">{msg}</div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button asChild variant="hero" size="xl" className="px-4">
-              <a href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"><MessageCircle /> WhatsApp</a>
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 rounded-[14px] border bg-card p-2 pl-5 shadow-bar">
+            <span className="min-w-0 flex-1 truncate font-mono text-[15px] md:text-[17px]">{link.replace(/^https?:\/\//, "")}</span>
+            <Button variant="ink" size="xl" onClick={async () => { await copy(link, "Link copied"); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
+              {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
             </Button>
-            <Button variant="outline" size="xl" className="rounded-full px-4" onClick={async () => { await navigator.clipboard.writeText(msg); toast.success("Message copied"); }}>
-              <Copy /> Copy message
-            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Button asChild variant="quiet" size="tap"><a href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"><MessageCircle /> WhatsApp</a></Button>
+            <Button variant="quiet" size="tap" onClick={() => copy(msg, "Message copied for Slack")}><Hash /> Slack</Button>
+            <Button asChild variant="quiet" size="tap"><a href={`mailto:?subject=${encodeURIComponent(`Gift for ${data.pot.recipient_name}`)}&body=${encodeURIComponent(msg)}`}><Mail /> Email</a></Button>
           </div>
         </section>
 
-        <section className="kitty-card flex items-start gap-4 p-5">
-          <BellRing className="mt-0.5 size-5 shrink-0 text-primary" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">Reminders</p>
-            <p className="text-sm text-muted-foreground">Kitty will draft a nudge for anyone who hasn't chipped in 24 hours before the deadline.</p>
+        <section className="space-y-2">
+          <p className="text-[13px] text-muted-foreground">Ready to send</p>
+          <div className="flex justify-end">
+            <button type="button" onClick={() => copy(msg, "Message copied")} className="max-w-[85%] rounded-[18px] rounded-br-[6px] bg-foreground px-4 py-3 text-left text-[15px] leading-relaxed text-background">
+              {msg}
+            </button>
           </div>
-          <Switch
-            checked={reminders}
-            onCheckedChange={async (v) => {
-              setRem(v);
-              try { await setReminders({ data: { slug, adminToken: t, enabled: v } }); } catch { setRem(!v); toast.error("Couldn't save that. Try again."); }
-            }}
-            aria-label="Reminders"
-          />
         </section>
 
-        <section className="kitty-card space-y-3 p-5">
-          <CopyRow label="Your private manage link" value={manage} icon={<KeyRound className="size-4 text-primary" />} />
-          <p className="text-xs text-muted-foreground">Keep this one to yourself. It lets you see everything and cancel the kitty. We've also saved it on this device.</p>
+        <section className="divide-y border-y">
+          <div className="flex min-h-16 items-center gap-3 py-3">
+            <Lock className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px]">Your private manage link</p>
+              <p className="text-[13px] text-muted-foreground">Saved on this device. Keep it to yourself.</p>
+            </div>
+            <Button variant="quiet" size="tap" onClick={() => copy(manage, "Manage link copied")}><Copy /> Copy</Button>
+          </div>
+          <label className="flex min-h-16 cursor-pointer items-center gap-3 py-3">
+            <span className="flex-1 text-[15px]">Draft a nudge 24 hours before the deadline for anyone who hasn't chipped in.</span>
+            <Switch
+              checked={reminders}
+              onCheckedChange={async (v) => {
+                setRem(v);
+                try { await setReminders({ data: { slug, adminToken: t, enabled: v } }); } catch { setRem(!v); toast.error("Couldn't save that. Try again."); }
+              }}
+              aria-label="Reminders"
+            />
+          </label>
         </section>
 
-        <Button asChild variant="soft" size="xl" className="w-full">
-          <Link to="/k/$slug/manage" params={{ slug }} search={{ t }}>Watch the pot fill up</Link>
-        </Button>
+        <Link to="/k/$slug/manage" params={{ slug }} search={{ t }} className="inline-flex min-h-11 items-center text-[15px] underline underline-offset-4">
+          Watch the pot fill up
+        </Link>
       </main>
     </div>
   );
 }
-

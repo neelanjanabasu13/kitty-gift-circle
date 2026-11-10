@@ -1,116 +1,127 @@
-import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict, format } from "date-fns";
-import { Sparkles, Users, PenLine, Gift, Clock } from "lucide-react";
 import type { PotView } from "@/lib/kitty.functions";
 import { formatMoney, initials, stillToChipIn } from "@/lib/kitty";
 import { PotMeter } from "./PotMeter";
+import { AgentFeed } from "./AgentFeed";
+import { MoneyPill } from "./Money";
+import { CommissionNote, PickCard, PickSkeleton } from "./PickCard";
 
 export function Deadline({ at }: { at: string }) {
   const d = new Date(at);
   const past = d.getTime() < Date.now();
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground" suppressHydrationWarning>
-      <Clock className="size-4" />
-      {past ? "Deadline passed" : `Closes in ${formatDistanceToNowStrict(d)}`} · {format(d, "EEE d MMM, HH:mm")}
+    <span className="tabular" suppressHydrationWarning>
+      {past ? "Closed" : `Closes in ${formatDistanceToNowStrict(d)}`} · {format(d, "EEE d MMM, HH:mm")}
     </span>
   );
 }
 
-export function Section({ icon, title, children, aside }: { icon: React.ReactNode; title: string; children: React.ReactNode; aside?: React.ReactNode }) {
+/** Builds the agent's current status and the honest 'up next' list from what we know today. */
+export function agentNarration(view: PotView) {
+  const { pot, raised } = view;
+  const topic = pot.likes[0] ?? "thoughtful";
+  const budget = formatMoney(Math.max(raised, pot.target_amount * 0.5), pot.currency);
+  if (pot.status === "cancelled") return { working: undefined, upNext: [] as string[] };
+  const working = view.people === 0 ? "Waiting for the first chip-in..." : `Watching the pot at ${formatMoney(raised, pot.currency)}. Lining up ${topic} gifts...`;
+  const upNext = [
+    `Search shops for ${topic} gifts under ${budget}`,
+    "Rank picks against what the group voted for",
+    pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote",
+  ];
+  return { working, upNext };
+}
+
+export function SectionTitle({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
   return (
-    <section className="kitty-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
-          <span className="grid size-8 place-items-center rounded-full bg-primary-soft text-accent-foreground">{icon}</span>
-          {title}
-        </h2>
-        {aside}
-      </div>
-      {children}
-    </section>
+    <div className="mb-4 flex items-baseline justify-between gap-3 border-b pb-3">
+      <h2 className="text-[26px]">{children}</h2>
+      {aside}
+    </div>
   );
 }
 
-export function PotLive({ view }: { view: PotView }) {
-  const { pot, raised, people, contributors, signatures, events } = view;
+export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?: boolean }) {
+  const { pot, raised, people, contributors, signatures, events, candidates } = view;
   const still = stillToChipIn(pot.expected_count, people);
+  const { working, upNext } = agentNarration(view);
+  const nextUnlock = candidates.find((c) => c.price != null && Number(c.price) > raised);
 
   return (
-    <div className="space-y-4">
-      <section className="kitty-card p-5">
-        <PotMeter raised={raised} target={pot.target_amount} currency={pot.currency} people={people} />
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1">
-          <Deadline at={pot.deadline_at} />
-        </div>
-      </section>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-12">
+      <div className="lg:sticky lg:top-6 lg:self-start">
+        <AgentFeed lines={events} working={working} upNext={upNext} />
+      </div>
 
-      <Section icon={<Users className="size-4" />} title="Who's in" aside={still > 0 && pot.status === "collecting" ? <span className="text-sm font-medium text-primary">{still} still to chip in</span> : null}>
-        {contributors.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nobody yet. Faces appear here the moment someone chips in.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-3">
-            <AnimatePresence initial={false}>
-              {contributors.map((c) => (
-                <motion.li key={c.id} layout initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} className="flex w-16 flex-col items-center gap-1 text-center">
-                  <span className={`grid size-12 place-items-center rounded-full text-sm font-semibold ${c.name ? "bg-primary-soft text-accent-foreground" : "bg-muted text-muted-foreground"}`}>
-                    {c.name ? initials(c.name) : "?"}
-                  </span>
-                  <span className="w-full truncate text-xs font-medium">{c.name ?? "Anonymous"}</span>
-                  <span className="text-[11px] text-muted-foreground">{c.amount != null ? formatMoney(c.amount, pot.currency) : "amount hidden"}</span>
-                </motion.li>
-              ))}
-            </AnimatePresence>
-          </ul>
-        )}
-      </Section>
-
-      <Section icon={<Gift className="size-4" />} title="Gift picks">
-        <p className="mb-4 text-sm text-muted-foreground">Kitty starts picking gifts as the pot grows.</p>
-        <LayoutGroup>
-          <div className="grid grid-cols-3 gap-3">
-            {[0, 1, 2].map((i) => (
-              <motion.div key={i} layout className="space-y-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
-                <div className="aspect-square rounded-2xl shimmer" />
-                <div className="h-3 w-4/5 rounded-full shimmer" />
-                <div className="h-3 w-1/2 rounded-full shimmer" />
-              </motion.div>
-            ))}
+      <div className="space-y-10">
+        {showMeter && (
+          <div className="space-y-4">
+            <PotMeter raised={raised} target={pot.target_amount} currency={pot.currency} people={people} footer={<Deadline at={pot.deadline_at} />} />
+            <p className="text-[14px] text-muted-foreground">
+              {nextUnlock
+                ? `At ${formatMoney(Number(nextUnlock.price), pot.currency)} the ${nextUnlock.title} comes into reach.`
+                : "Kitty will flag the next gift that comes into reach as the pot grows."}
+            </p>
           </div>
-        </LayoutGroup>
-      </Section>
-
-      <Section icon={<PenLine className="size-4" />} title="The card">
-        {signatures.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No messages yet. Signatures land here as people chip in.</p>
-        ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {signatures.map((s, i) => (
-              <motion.li key={s.id} layout initial={{ opacity: 0, rotate: i % 2 ? 1.5 : -1.5 }} animate={{ opacity: 1, rotate: i % 2 ? 0.6 : -0.6 }} className="rounded-2xl bg-secondary p-4">
-                <p className="font-display text-[15px] leading-snug italic">"{s.message}"</p>
-                <p className="mt-2 text-xs font-semibold text-muted-foreground">{s.name}</p>
-              </motion.li>
-            ))}
-          </ul>
         )}
-      </Section>
 
-      <Section icon={<Sparkles className="size-4" />} title="Agent activity">
-        {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Kitty's watching the pot. Updates appear here.</p>
-        ) : (
-          <ol className="relative space-y-4 border-l-2 border-primary-soft pl-5">
-            <AnimatePresence initial={false}>
-              {events.map((e) => (
-                <motion.li key={e.id} layout initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="relative">
-                  <span className="absolute -left-[27px] top-1 size-3 rounded-full border-2 border-card bg-primary" />
-                  <p className="text-sm">{e.message}</p>
-                  <p className="text-xs text-muted-foreground" suppressHydrationWarning>{formatDistanceToNowStrict(new Date(e.at))} ago</p>
-                </motion.li>
+        <section>
+          <SectionTitle aside={still > 0 && pot.status === "collecting" ? <span className="text-[13px] text-muted-foreground tabular">{still} still to chip in</span> : null}>Who's in</SectionTitle>
+          {contributors.length === 0 ? (
+            <p className="text-[15px] text-muted-foreground">Nobody yet. Faces appear the moment someone chips in.</p>
+          ) : (
+            <ul className="divide-y">
+              <AnimatePresence initial={false}>
+                {contributors.map((c, i) => (
+                  <motion.li key={c.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="flex min-h-14 items-center gap-3">
+                    <span className={`grid size-9 shrink-0 place-items-center rounded-full border text-[12px] font-medium ${c.name ? "bg-card" : "bg-muted text-muted-foreground"}`}>{c.name ? initials(c.name) : "?"}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px]">{c.name ?? "Anonymous"}</span>
+                    <span className="text-[15px] tabular">{c.amount != null ? formatMoney(c.amount, pot.currency) : <span className="text-[13px] text-muted-foreground">amount hidden</span>}</span>
+                    <MoneyPill state={c.status === "captured" ? "paid" : "held"} />
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          )}
+        </section>
+
+        <section>
+          <SectionTitle>Gift picks</SectionTitle>
+          {candidates.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {candidates.slice(0, 4).map((c) => (
+                <PickCard key={c.id} currency={pot.currency} pick={{ ...c, price: c.price != null ? Number(c.price) : null }} />
               ))}
-            </AnimatePresence>
-          </ol>
-        )}
-      </Section>
+            </div>
+          ) : (
+            <>
+              <p className="mb-4 text-[15px] text-muted-foreground">Kitty starts picking gifts as the pot grows.</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <PickSkeleton />
+                <PickSkeleton />
+                <div className="hidden sm:block"><PickSkeleton /></div>
+              </div>
+            </>
+          )}
+          <div className="mt-3"><CommissionNote /></div>
+        </section>
+
+        <section>
+          <SectionTitle>The card</SectionTitle>
+          {signatures.length === 0 ? (
+            <p className="text-[15px] text-muted-foreground">No messages yet. They land here as people chip in.</p>
+          ) : (
+            <ul className="divide-y">
+              {signatures.map((s) => (
+                <li key={s.id} className="py-4">
+                  <p className="font-display text-[22px] leading-snug italic">"{s.message}"</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">{s.name}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

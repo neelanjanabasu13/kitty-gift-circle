@@ -1,38 +1,38 @@
-import { motion, useSpring, useTransform } from "motion/react";
+import { motion, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { useEffect } from "react";
 import { formatMoney, meterPercent } from "@/lib/kitty";
+import { MoneyPill } from "./Money";
 
-function AnimatedMoney({ value, currency }: { value: number; currency: string }) {
-  const spring = useSpring(0, { stiffness: 60, damping: 18 });
+export function CountUp({ value, currency }: { value: number; currency: string }) {
+  const reduce = useReducedMotion();
+  const spring = useSpring(reduce ? value : 0, { stiffness: 70, damping: 20 });
   const text = useTransform(spring, (v) => formatMoney(Math.round(v), currency));
   useEffect(() => {
     spring.set(value);
   }, [value, spring]);
-  return <motion.span>{text}</motion.span>;
+  return <motion.span className="tabular">{text}</motion.span>;
 }
 
-export function PotMeter({ raised, target, currency, people, size = "lg" }: { raised: number; target: number; currency: string; people: number; size?: "lg" | "sm" }) {
+export function PotMeter({ raised, target, currency, people, size = "lg", footer }: { raised: number; target: number; currency: string; people: number; size?: "lg" | "sm"; footer?: React.ReactNode }) {
   const pct = meterPercent(raised, target);
   return (
     <div className="space-y-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className={size === "lg" ? "font-display text-4xl font-semibold" : "font-display text-2xl font-semibold"}>
-          <AnimatedMoney value={raised} currency={currency} />
-          <span className="ml-1.5 font-sans text-base font-normal text-muted-foreground">of {formatMoney(target, currency)}</span>
+      <div className="flex items-end justify-between gap-3">
+        <p className="flex items-baseline gap-2">
+          <span className={size === "lg" ? "font-display text-[56px] leading-[0.9] tracking-[-0.03em]" : "font-display text-[40px] leading-[0.9] tracking-[-0.03em]"}>
+            <CountUp value={raised} currency={currency} />
+          </span>
+          <span className="text-[15px] text-muted-foreground tabular">of {formatMoney(target, currency)}</span>
         </p>
-        <span className="rounded-full bg-held-soft px-2.5 py-1 text-xs font-semibold text-held">held</span>
+        <MoneyPill state="held" className="mb-1" />
       </div>
-      <div className="h-4 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <motion.div
-          className="h-full rounded-full bg-gradient-meter"
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.max(pct, raised > 0 ? 4 : 0)}%` }}
-          transition={{ type: "spring", stiffness: 50, damping: 16 }}
-        />
+      <div className="h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Pot progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <motion.div className="h-full rounded-full bg-ember" initial={{ width: 0 }} animate={{ width: `${Math.max(pct, raised > 0 ? 3 : 0)}%` }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
       </div>
-      <p className="text-sm text-muted-foreground">
-        {people === 0 ? "Nobody's chipped in yet. Be the first." : `From ${people} ${people === 1 ? "person" : "people"} · ${pct}% there`}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
+        <span className="tabular">{people === 0 ? "Nobody's chipped in yet" : `from ${people} ${people === 1 ? "person" : "people"}`}</span>
+        {footer}
+      </div>
     </div>
   );
 }

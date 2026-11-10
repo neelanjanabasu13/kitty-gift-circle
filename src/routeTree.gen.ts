@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
+import { Route as PreviewRouteImport } from './routes/preview'
 import { Route as StartRouteImport } from './routes/start'
 import { Route as KSlugRouteImport } from './routes/k.$slug'
 import { Route as KSlugManageRouteImport } from './routes/k.$slug_.manage'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PreviewRoute = PreviewRouteImport.update({
+  id: '/preview',
+  path: '/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StartRoute = StartRouteImport.update({
@@ -50,6 +56,7 @@ const KSlugShareRoute = KSlugShareRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
   '/k/$slug/manage': typeof KSlugManageRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
   '/k/$slug/manage': typeof KSlugManageRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
   '/k/$slug_/manage': typeof KSlugManageRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/health'
+    | '/preview'
     | '/start'
     | '/k/$slug'
     | '/k/$slug/manage'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/health'
+    | '/preview'
     | '/start'
     | '/k/$slug'
     | '/k/$slug/manage'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/health'
+    | '/preview'
     | '/start'
     | '/k/$slug'
     | '/k/$slug_/manage'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
+  PreviewRoute: typeof PreviewRoute
   StartRoute: typeof StartRoute
   KSlugRoute: typeof KSlugRoute
   KSlugManageRoute: typeof KSlugManageRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/preview': {
+      id: '/preview'
+      path: '/preview'
+      fullPath: '/preview'
+      preLoaderRoute: typeof PreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/start': {
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
+  PreviewRoute: PreviewRoute,
   StartRoute: StartRoute,
   KSlugRoute: KSlugRoute,
   KSlugManageRoute: KSlugManageRoute,

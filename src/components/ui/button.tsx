@@ -16,14 +16,17 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        hero: "bg-gradient-plum text-primary-foreground shadow-lift rounded-full font-semibold hover:brightness-110 active:scale-[0.98] transition-all",
-        soft: "bg-primary-soft text-accent-foreground rounded-full hover:bg-primary-soft/70",
+        // Kitty primary: ink fill, one per screen
+        ink: "bg-primary text-primary-foreground btn-highlight rounded-[12px] font-medium transition-all duration-200 hover:-translate-y-px active:translate-y-0",
+        // Kitty secondary: white with hairline
+        quiet: "surface rounded-[12px] font-medium text-foreground transition-all duration-200 hover:-translate-y-px hover:border-foreground/20",
       },
       size: {
         default: "h-9 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-xs",
         lg: "h-10 rounded-md px-8",
-        xl: "h-14 px-8 text-base",
+        xl: "h-12 px-6 text-[15px]",
+        tap: "h-11 px-4 text-sm",
         icon: "h-9 w-9",
       },
     },

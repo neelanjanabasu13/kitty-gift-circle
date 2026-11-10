@@ -1,14 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, Share2, HeartHandshake } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Logo } from "@/components/kitty/Logo";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { TopBar } from "@/components/kitty/Logo";
+import { Missing } from "@/components/kitty/Missing";
 import { PotLive } from "@/components/kitty/PotLive";
+import { Cancelled } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { cancelPot } from "@/lib/kitty.functions";
-import { Missing } from "@/components/kitty/Missing";
 
 export const Route = createFileRoute("/k/$slug_/manage")({
   validateSearch: (s: Record<string, unknown>) => ({ t: typeof s["t"] === "string" ? (s["t"] as string) : "" }),
@@ -31,6 +33,7 @@ function ManagePage() {
   const { t } = Route.useSearch();
   const { data, refetch } = useLivePot(slug, t);
   const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
 
   useEffect(() => {
     if (!data?.isAdmin) return;
@@ -45,78 +48,80 @@ function ManagePage() {
   if (!data.isAdmin) return <Missing text="This manage link isn't valid. Check you copied all of it." />;
   const { pot } = data;
   const cancelled = pot.status === "cancelled";
+  const canCancel = ["collecting", "voting", "veto"].includes(pot.status);
 
   return (
-    <div className="min-h-screen bg-gradient-warm">
-      <header className="mx-auto flex max-w-xl items-center justify-between px-5 py-5">
-        <Logo />
-        <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-accent-foreground">Organiser view</span>
-      </header>
-      <main className="mx-auto max-w-xl space-y-4 px-5 pb-16">
+    <div className="min-h-screen">
+      <TopBar
+        right={
+          <div className="flex items-center gap-2">
+            {!cancelled && <Button asChild variant="ink" size="tap"><Link to="/k/$slug/share" params={{ slug }} search={{ t }}>Share</Link></Button>}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="quiet" size="icon" className="size-11" aria-label="Kitty options"><MoreHorizontal /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 rounded-[12px]">
+                <DropdownMenuItem disabled>Edit details (coming soon)</DropdownMenuItem>
+                <DropdownMenuItem asChild><Link to="/k/$slug" params={{ slug }}>View as a contributor</Link></DropdownMenuItem>
+                {canCancel && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirm(true)}>Cancel kitty</DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        }
+      />
+      <main className="mx-auto max-w-6xl space-y-10 px-5 pt-8 pb-20 md:px-8">
         <div>
-          <p className="text-sm text-muted-foreground">{pot.organiser_name}'s kitty</p>
-          <h1 className="font-display text-4xl font-semibold">For {pot.recipient_name}</h1>
+          <p className="text-[13px] text-muted-foreground">{pot.organiser_name}'s kitty</p>
+          <h1 className="mt-1 text-[44px] md:text-[64px]">For <em>{pot.recipient_name}</em></h1>
         </div>
 
-        {cancelled ? (
-          <section className="kitty-card space-y-2 p-6 text-center">
-            <HeartHandshake className="mx-auto size-10 text-primary" />
-            <h2 className="font-display text-2xl font-semibold">Kitty's off.</h2>
-            <p className="text-muted-foreground">Every hold has been released and nobody was charged.</p>
-          </section>
-        ) : (
-          <Button asChild variant="hero" size="xl" className="w-full">
-            <Link to="/k/$slug/share" params={{ slug }} search={{ t }}><Share2 /> Share the link</Link>
-          </Button>
-        )}
-
+        {cancelled && <Cancelled />}
         <PotLive view={data} />
 
         {pot.likes.length > 0 && (
-          <section className="kitty-card p-5 text-sm">
-            <p className="font-semibold">What Kitty knows about {pot.recipient_name}</p>
-            <p className="mt-1 text-muted-foreground">Likes {pot.likes.join(", ")}{pot.dislikes.length ? `. Avoiding ${pot.dislikes.join(", ")}.` : "."}</p>
+          <section className="border-t pt-6 text-[14px] text-muted-foreground">
+            <p>Kitty knows {pot.recipient_name} likes {pot.likes.join(", ")}{pot.dislikes.length ? ` and will avoid ${pot.dislikes.join(", ")}.` : "."}</p>
             {Object.keys(data.voteTally).length > 0 && (
-              <p className="mt-1 text-muted-foreground">Group votes: {Object.entries(data.voteTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} (${v})`).join(", ")}</p>
+              <p className="mt-1">Group votes: {Object.entries(data.voteTally).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} (${v})`).join(", ")}</p>
             )}
           </section>
         )}
-
-        {!cancelled && ["collecting", "voting", "veto"].includes(pot.status) && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" className="w-full text-destructive hover:text-destructive">Cancel kitty</Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="rounded-3xl">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="font-display">Call off the kitty?</AlertDialogTitle>
-                <AlertDialogDescription>Kitty will release every hold straight away. Nobody gets charged, and this can't be undone.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="rounded-full">Keep it going</AlertDialogCancel>
-                <AlertDialogAction
-                  className="rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  disabled={busy}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      const r = await cancelPot({ data: { slug, adminToken: t } });
-                      if (r.failed) toast.warning(`${r.failed} hold${r.failed === 1 ? "" : "s"} didn't release first time. They'll drop off on their own.`);
-                      await refetch();
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : "Couldn't cancel. Try again.");
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  {busy ? <Loader2 className="animate-spin" /> : null} Yes, cancel and release holds
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
       </main>
+
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent className="rounded-[14px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-[28px] font-normal">Call off the kitty?</AlertDialogTitle>
+            <AlertDialogDescription>Kitty will release every hold straight away. Nobody gets charged, and this can't be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-11 rounded-[12px]">Keep it going</AlertDialogCancel>
+            <AlertDialogAction
+              className="h-11 rounded-[12px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const r = await cancelPot({ data: { slug, adminToken: t } });
+                  if (r.failed) toast.warning(`${r.failed} hold${r.failed === 1 ? "" : "s"} didn't release first time. They'll drop off on their own.`);
+                  await refetch();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Couldn't cancel. Try again.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "Releasing..." : "Cancel and release holds"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
