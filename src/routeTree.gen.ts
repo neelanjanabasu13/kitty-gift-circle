@@ -10,33 +10,102 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HealthRouteImport } from './routes/health'
+import { Route as StartRouteImport } from './routes/start'
+import { Route as KSlugRouteImport } from './routes/k.$slug'
+import { Route as KSlugManageRouteImport } from './routes/k.$slug_.manage'
+import { Route as KSlugShareRouteImport } from './routes/k.$slug_.share'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HealthRoute = HealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartRoute = StartRouteImport.update({
+  id: '/start',
+  path: '/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KSlugRoute = KSlugRouteImport.update({
+  id: '/k/$slug',
+  path: '/k/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KSlugManageRoute = KSlugManageRouteImport.update({
+  id: '/k/$slug_/manage',
+  path: '/k/$slug/manage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KSlugShareRoute = KSlugShareRouteImport.update({
+  id: '/k/$slug_/share',
+  path: '/k/$slug/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/health': typeof HealthRoute
+  '/start': typeof StartRoute
+  '/k/$slug': typeof KSlugRoute
+  '/k/$slug/manage': typeof KSlugManageRoute
+  '/k/$slug/share': typeof KSlugShareRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/health': typeof HealthRoute
+  '/start': typeof StartRoute
+  '/k/$slug': typeof KSlugRoute
+  '/k/$slug/manage': typeof KSlugManageRoute
+  '/k/$slug/share': typeof KSlugShareRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/health': typeof HealthRoute
+  '/start': typeof StartRoute
+  '/k/$slug': typeof KSlugRoute
+  '/k/$slug_/manage': typeof KSlugManageRoute
+  '/k/$slug_/share': typeof KSlugShareRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/health'
+    | '/start'
+    | '/k/$slug'
+    | '/k/$slug/manage'
+    | '/k/$slug/share'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/health'
+    | '/start'
+    | '/k/$slug'
+    | '/k/$slug/manage'
+    | '/k/$slug/share'
+  id:
+    | '__root__'
+    | '/'
+    | '/health'
+    | '/start'
+    | '/k/$slug'
+    | '/k/$slug_/manage'
+    | '/k/$slug_/share'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HealthRoute: typeof HealthRoute
+  StartRoute: typeof StartRoute
+  KSlugRoute: typeof KSlugRoute
+  KSlugManageRoute: typeof KSlugManageRoute
+  KSlugShareRoute: typeof KSlugShareRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +117,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/health': {
+      id: '/health'
+      path: '/health'
+      fullPath: '/health'
+      preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start': {
+      id: '/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/k/$slug': {
+      id: '/k/$slug'
+      path: '/k/$slug'
+      fullPath: '/k/$slug'
+      preLoaderRoute: typeof KSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/k/$slug_/manage': {
+      id: '/k/$slug_/manage'
+      path: '/k/$slug/manage'
+      fullPath: '/k/$slug/manage'
+      preLoaderRoute: typeof KSlugManageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/k/$slug_/share': {
+      id: '/k/$slug_/share'
+      path: '/k/$slug/share'
+      fullPath: '/k/$slug/share'
+      preLoaderRoute: typeof KSlugShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HealthRoute: HealthRoute,
+  StartRoute: StartRoute,
+  KSlugRoute: KSlugRoute,
+  KSlugManageRoute: KSlugManageRoute,
+  KSlugShareRoute: KSlugShareRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -28,3 +28,10 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Kitty architecture
+- All pot reads/writes go through server functions in `src/lib/kitty.functions.ts` using the admin client; tables have RLS on with no anon policies, because there are no user accounts and visibility rules (hidden names/amounts) must be enforced server-side.
+- Organiser actions are authorised by the pot's `admin_token`; contributor withdraw is authorised by the PayPal order id kept in the contributor's localStorage.
+- Realtime is a data-free broadcast doorbell (`pot-<id>` topic, DB triggers) and clients refetch via `getPot`, so no table rows are exposed to the browser.
+- PayPal calls hit the sandbox REST API directly from `src/lib/paypal.server.ts` with the user's own PAYPAL_CLIENT_ID/SECRET (not the connector gateway), as the user specified.
+- The app currency is set in one place: `DEFAULT_CURRENCY` in `src/lib/config.ts`.
