@@ -35,3 +35,6 @@ use the editor.
 - Realtime is a data-free broadcast doorbell (`pot-<id>` topic, DB triggers) and clients refetch via `getPot`, so no table rows are exposed to the browser.
 - PayPal calls hit the sandbox REST API directly from `src/lib/paypal.server.ts` with the user's own PAYPAL_CLIENT_ID/SECRET (not the connector gateway), as the user specified.
 - The app currency is set in one place: `DEFAULT_CURRENCY` in `src/lib/config.ts`.
+- Gift agent: `src/lib/agent.server.ts` orchestrates (plan, search, clean, score, rank, store) and narrates to agent_events; all money and ranking rules are pure code in `src/lib/scoring.ts` (unit-tested), and AI (`src/lib/ai.server.ts`) only plans queries, scores fit and writes reasons, so ranking stays deterministic and auditable.
+- Agent runs are triggered by awaited server functions (`triggerAgent` from the contributor page, `runKittyNow`, `updatePotProfile`) rather than background work, because the Worker runtime may drop un-awaited work; a per-pot lock (`pots.agent_lock_at` + `agent_pending`) stops concurrent triggers double-searching.
+- Shop search is Channel3 via `src/lib/channel3.server.ts`; a missing CHANNEL3_API_KEY returns `not_configured` and the agent posts one explanatory event instead of failing.

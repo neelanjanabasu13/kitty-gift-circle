@@ -43,5 +43,5 @@ export function PickSkeleton() {
 }
 
 export function CommissionNote() {
-  return <p className="text-[12px] text-muted-foreground">Kitty may earn a small commission from shops it buys from. It never changes what Kitty picks.</p>;
+  return <p className="text-[12px] text-muted-foreground">We may earn a commission when you buy through links on this page.</p>;
 }

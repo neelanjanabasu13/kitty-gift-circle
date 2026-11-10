@@ -65,6 +65,7 @@ export type Database = {
           rank: number | null
           reason: string | null
           retailer: string | null
+          signals: Json
           title: string
           total_score: number | null
         }
@@ -83,6 +84,7 @@ export type Database = {
           rank?: number | null
           reason?: string | null
           retailer?: string | null
+          signals?: Json
           title: string
           total_score?: number | null
         }
@@ -101,6 +103,7 @@ export type Database = {
           rank?: number | null
           reason?: string | null
           retailer?: string | null
+          signals?: Json
           title?: string
           total_score?: number | null
         }
@@ -399,6 +402,9 @@ export type Database = {
       pots: {
         Row: {
           admin_token: string
+          agent_lock_at: string | null
+          agent_pending: boolean
+          agent_working: string | null
           closeness: string
           created_at: string
           currency: string
@@ -407,6 +413,8 @@ export type Database = {
           dislikes: string[]
           expected_count: number
           id: string
+          last_search_band: number
+          last_top_categories: string[]
           likes: string[]
           mode: string
           occasion: string
@@ -423,6 +431,9 @@ export type Database = {
         }
         Insert: {
           admin_token: string
+          agent_lock_at?: string | null
+          agent_pending?: boolean
+          agent_working?: string | null
           closeness: string
           created_at?: string
           currency?: string
@@ -431,6 +442,8 @@ export type Database = {
           dislikes?: string[]
           expected_count?: number
           id?: string
+          last_search_band?: number
+          last_top_categories?: string[]
           likes?: string[]
           mode?: string
           occasion: string
@@ -447,6 +460,9 @@ export type Database = {
         }
         Update: {
           admin_token?: string
+          agent_lock_at?: string | null
+          agent_pending?: boolean
+          agent_working?: string | null
           closeness?: string
           created_at?: string
           currency?: string
@@ -455,6 +471,8 @@ export type Database = {
           dislikes?: string[]
           expected_count?: number
           id?: string
+          last_search_band?: number
+          last_top_categories?: string[]
           likes?: string[]
           mode?: string
           occasion?: string

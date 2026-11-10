@@ -1,5 +1,12 @@
-// Single place to switch the app's money currency (e.g. to "USD").
-export const DEFAULT_CURRENCY: "GBP" | "USD" = "GBP";
+// Single place to switch market: GB/GBP by default, change to US/USD for the US.
+export const MARKET: { country: "GB" | "US"; currency: "GBP" | "USD" } = { country: "GB", currency: "GBP" };
+export const DEFAULT_CURRENCY = MARKET.currency;
+
+/** Fixed gift categories the agent may assign (organiser extras are added per pot). */
+export const BASE_CATEGORIES = ["cooking", "books", "experiences", "plants", "home", "wellbeing", "tech", "crafts"];
+
+/** Pot sizes at which Kitty runs a fresh shop search. */
+export const SEARCH_BANDS = [30, 50, 75, 100, 150, 200];
 
 export const OCCASIONS = [
   { value: "leaving", label: "Leaving do", noun: "leaving" },

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowUp, ImagePlus, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -137,6 +137,25 @@ function StartPage() {
     if (!valid[step]) return;
     setIdx((i) => Math.min(i + 1, steps.length - 1));
   };
+
+  // Enter always advances when the current answer is valid, even after tapping a chip.
+  const keyRef = useRef<() => void>(() => {});
+  keyRef.current = () => {
+    if (step === "review") { if (!busy) void submit(); return; }
+    next();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.defaultPrevented || e.shiftKey || e.isComposing) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return; // the form handles those
+      if (el?.closest("[role=dialog]")) return;
+      e.preventDefault();
+      keyRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const onFile = (f?: File) => {
     if (!f) return;

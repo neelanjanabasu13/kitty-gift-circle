@@ -121,7 +121,7 @@ async function loadPot(slug: string, adminToken?: string) {
     db.from("card_signatures").select("id, name, message, created_at, contribution_id").eq("pot_id", pot.id).order("created_at"),
     db.from("agent_events").select("id, at, kind, message").eq("pot_id", pot.id).order("at", { ascending: false }).limit(30),
     db.from("category_votes").select("category").eq("pot_id", pot.id),
-    db.from("candidates").select("id, title, image_url, offer_url, retailer, price, currency, category, reason, rank, band").eq("pot_id", pot.id).order("rank"),
+    db.from("candidates").select("id, title, image_url, offer_url, retailer, price, currency, category, reason, rank, band, fit_score, total_score").eq("pot_id", pot.id).order("rank", { nullsFirst: false }),
   ]);
 
   const live = contribs ?? [];
@@ -165,6 +165,8 @@ async function loadPot(slug: string, adminToken?: string) {
       organiser_paypal_email: isAdmin ? pot.organiser_paypal_email : null,
       status: pot.status,
       reminders_enabled: pot.reminders_enabled,
+      agent_working: pot.agent_working,
+      agent_busy: !!pot.agent_lock_at && Date.now() - new Date(pot.agent_lock_at).getTime() < 120_000,
       created_at: pot.created_at,
     },
     wishlistImageUrl,
@@ -174,7 +176,7 @@ async function loadPot(slug: string, adminToken?: string) {
     signatures: (sigs ?? []).filter((s) => !s.contribution_id || liveIds.has(s.contribution_id)).map(({ contribution_id: _c, ...s }) => s),
     events: events ?? [],
     voteTally,
-    candidates: candidates ?? [],
+    candidates: (candidates ?? []).map((c) => ({ ...c, price: c.price != null ? Number(c.price) : null, fit_score: c.fit_score != null ? Number(c.fit_score) : null })),
   };
 }
 
@@ -246,9 +248,9 @@ export const authorizeContribution = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ orderId: z.string().min(5).max(60) }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
-    const { data: c } = await db.from("contributions").select("id, pot_id, amount, status, display_name, visibility").eq("paypal_order_id", data.orderId).maybeSingle();
+    const { data: c } = await db.from("contributions").select("id, pot_id, amount, status, display_name, visibility, authorization_id").eq("paypal_order_id", data.orderId).maybeSingle();
     if (!c) throw new Error("We couldn't match that PayPal payment to this kitty.");
-    if (c.status === "authorized") return { ok: true, amount: Number(c.amount), contributionId: c.id };
+    if (c.status === "authorized") return { ok: true, amount: Number(c.amount), contributionId: c.id, authorizationId: c.authorization_id };
 
     const { authorizeOrder, plainPayPalError } = await pp();
     try {
@@ -273,7 +275,7 @@ export const authorizeContribution = createServerFn({ method: "POST" })
       if (pot && raised >= Number(pot.target_amount)) {
         await logEvent(c.pot_id, "target_reached", "The pot has hit its target. Kitty will start lining up gifts.");
       }
-      return { ok: true, amount: Number(c.amount), contributionId: c.id };
+      return { ok: true, amount: Number(c.amount), contributionId: c.id, authorizationId: r.authorizationId as string | null };
     } catch (e) {
       await db.from("contributions").update({ status: "failed" }).eq("id", c.id);
       throw new Error(plainPayPalError(e));
@@ -390,3 +392,49 @@ export const healthCheck = createServerFn({ method: "POST" }).handler(async () =
   }
   return result;
 });
+
+// ---------- agent triggers ----------
+const agent = () => import("./agent.server");
+
+/** Fired by the contributor page after a hold is placed or withdrawn. Runs the agent to completion. */
+export const triggerAgent = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ contributionId: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: c } = await db.from("contributions").select("pot_id, status, display_name, visibility, created_at").eq("id", data.contributionId).maybeSingle();
+    if (!c) return { status: "ignored" as const };
+    if (Date.now() - new Date(c.created_at).getTime() > 3 * 86400_000) return { status: "ignored" as const };
+    const kind = c.status === "voided" ? "withdrawn" : LIVE.includes(c.status) ? "authorized" : null;
+    if (!kind) return { status: "ignored" as const };
+    const who = c.visibility === "anonymous" ? "someone" : c.display_name || "someone";
+    const { runAgent } = await agent();
+    return runAgent(c.pot_id, { kind, who });
+  });
+
+export const runKittyNow = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100) }).parse(d))
+  .handler(async ({ data }) => {
+    const pot = await requireAdmin(data.slug, data.adminToken);
+    await logEvent(pot.id, "manual_run", "Organiser asked me to take another look.");
+    const { runAgent } = await agent();
+    return runAgent(pot.id, { kind: "manual" });
+  });
+
+export const updatePotProfile = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({
+      slug: z.string().max(80),
+      adminToken: z.string().max(100),
+      likes: z.array(z.string().trim().min(1).max(30)).max(20),
+      dislikes: z.array(z.string().trim().min(1).max(30)).max(20),
+      wishlist_url: z.string().trim().url().max(500).or(z.literal("")),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const pot = await requireAdmin(data.slug, data.adminToken);
+    const db = await admin();
+    await db.from("pots").update({ likes: data.likes, dislikes: data.dislikes, wishlist_url: data.wishlist_url || null }).eq("id", pot.id);
+    await logEvent(pot.id, "profile_updated", `Got it. Updated what ${pot.recipient_name} is into. Re-planning from scratch.`);
+    const { runAgent } = await agent();
+    return runAgent(pot.id, { kind: "replan" });
+  });

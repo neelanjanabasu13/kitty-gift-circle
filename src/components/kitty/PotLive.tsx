@@ -6,6 +6,8 @@ import { PotMeter } from "./PotMeter";
 import { AgentFeed } from "./AgentFeed";
 import { MoneyPill } from "./Money";
 import { CommissionNote, PickCard, PickSkeleton } from "./PickCard";
+import { LayoutGroup } from "motion/react";
+import { nextUnlock } from "@/lib/scoring";
 
 export function Deadline({ at }: { at: string }) {
   const d = new Date(at);
@@ -19,17 +21,52 @@ export function Deadline({ at }: { at: string }) {
 
 /** Builds the agent's current status and the honest 'up next' list from what we know today. */
 export function agentNarration(view: PotView) {
-  const { pot, raised } = view;
-  const topic = pot.likes[0] ?? "thoughtful";
-  const budget = formatMoney(Math.max(raised, pot.target_amount * 0.5), pot.currency);
+  const { pot, raised, candidates } = view;
   if (pot.status === "cancelled") return { working: undefined, upNext: [] as string[] };
-  const working = view.people === 0 ? "Waiting for the first chip-in..." : `Watching the pot at ${formatMoney(raised, pot.currency)}. Lining up ${topic} gifts...`;
-  const upNext = [
-    `Search shops for ${topic} gifts under ${budget}`,
-    "Rank picks against what the group voted for",
-    pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote",
-  ];
+  const topic = pot.likes[0] ?? "thoughtful";
+  const ranked = candidates.some((c) => c.rank != null);
+  let working: string | undefined;
+  if (pot.agent_working) working = pot.agent_working;
+  else if (pot.agent_busy) working = "Thinking...";
+  else if (view.people === 0) working = "Waiting for the first chip-in...";
+  else working = ranked ? `Watching the pot at ${formatMoney(raised, pot.currency)}. Ready to re-rank.` : `Watching the pot at ${formatMoney(raised, pot.currency)}. Lining up ${topic} gifts...`;
+  const upNext = ranked
+    ? [pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote"]
+    : [`Search shops for ${topic} gifts under ${formatMoney(Math.max(raised, 30), pot.currency)}`, "Rank picks against what the group voted for", pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote"];
   return { working, upNext };
+}
+
+export function topPicks(view: PotView) {
+  return view.candidates.filter((c) => c.rank != null).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).slice(0, 3);
+}
+
+export function PicksGrid({ view, compact = false }: { view: PotView; compact?: boolean }) {
+  const picks = topPicks(view);
+  const note = view.events.find((e) => e.kind === "reranked");
+  if (!picks.length) {
+    return (
+      <>
+        <p className="mb-4 text-[15px] text-muted-foreground">Kitty starts picking gifts as the pot grows.</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <PickSkeleton />
+          <PickSkeleton />
+          <div className="hidden sm:block"><PickSkeleton /></div>
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      {note && <p className="mb-4 font-mono text-[12.5px] text-muted-foreground">{note.message}</p>}
+      <LayoutGroup>
+        <div className={compact ? "grid grid-cols-1 gap-3 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-3"}>
+          {picks.map((c) => (
+            <PickCard key={c.id} currency={view.pot.currency} pick={c} />
+          ))}
+        </div>
+      </LayoutGroup>
+    </>
+  );
 }
 
 export function SectionTitle({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
@@ -45,7 +82,7 @@ export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?:
   const { pot, raised, people, contributors, signatures, events, candidates } = view;
   const still = stillToChipIn(pot.expected_count, people);
   const { working, upNext } = agentNarration(view);
-  const nextUnlock = candidates.find((c) => c.price != null && Number(c.price) > raised);
+  const unlock = nextUnlock(candidates, raised);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-12">
@@ -58,8 +95,8 @@ export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?:
           <div className="space-y-4">
             <PotMeter raised={raised} target={pot.target_amount} currency={pot.currency} people={people} footer={<Deadline at={pot.deadline_at} />} />
             <p className="text-[14px] text-muted-foreground">
-              {nextUnlock
-                ? `At ${formatMoney(Number(nextUnlock.price), pot.currency)} the ${nextUnlock.title} comes into reach.`
+              {unlock
+                ? `At ${formatMoney(Number(unlock.price), pot.currency)} the ${unlock.title} comes into reach.`
                 : "Kitty will flag the next gift that comes into reach as the pot grows."}
             </p>
           </div>
@@ -87,22 +124,7 @@ export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?:
 
         <section>
           <SectionTitle>Gift picks</SectionTitle>
-          {candidates.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {candidates.slice(0, 4).map((c) => (
-                <PickCard key={c.id} currency={pot.currency} pick={{ ...c, price: c.price != null ? Number(c.price) : null }} />
-              ))}
-            </div>
-          ) : (
-            <>
-              <p className="mb-4 text-[15px] text-muted-foreground">Kitty starts picking gifts as the pot grows.</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <PickSkeleton />
-                <PickSkeleton />
-                <div className="hidden sm:block"><PickSkeleton /></div>
-              </div>
-            </>
-          )}
+          <PicksGrid view={view} />
           <div className="mt-3"><CommissionNote /></div>
         </section>
 

@@ -10,7 +10,8 @@ import { Missing } from "@/components/kitty/Missing";
 import { PotLive } from "@/components/kitty/PotLive";
 import { Cancelled } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
-import { cancelPot } from "@/lib/kitty.functions";
+import { cancelPot, runKittyNow } from "@/lib/kitty.functions";
+import { EditProfile } from "@/components/kitty/EditProfile";
 
 export const Route = createFileRoute("/k/$slug_/manage")({
   validateSearch: (s: Record<string, unknown>) => ({ t: typeof s["t"] === "string" ? (s["t"] as string) : "" }),
@@ -34,6 +35,8 @@ function ManagePage() {
   const { data, refetch } = useLivePot(slug, t);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
     if (!data?.isAdmin) return;
@@ -61,7 +64,7 @@ function ManagePage() {
                 <Button variant="quiet" size="icon" className="size-11" aria-label="Kitty options"><MoreHorizontal /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 rounded-[12px]">
-                <DropdownMenuItem disabled>Edit details (coming soon)</DropdownMenuItem>
+                <DropdownMenuItem disabled={!canCancel} onSelect={() => setEditing(true)}>Edit likes and wishlist</DropdownMenuItem>
                 <DropdownMenuItem asChild><Link to="/k/$slug" params={{ slug }}>View as a contributor</Link></DropdownMenuItem>
                 {canCancel && (
                   <>
@@ -77,7 +80,22 @@ function ManagePage() {
       <main className="mx-auto max-w-6xl space-y-10 px-5 pt-8 pb-20 md:px-8">
         <div>
           <p className="text-[13px] text-muted-foreground">{pot.organiser_name}'s kitty</p>
-          <h1 className="mt-1 text-[44px] md:text-[64px]">For <em>{pot.recipient_name}</em></h1>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <h1 className="mt-1 text-[44px] md:text-[64px]">For <em>{pot.recipient_name}</em></h1>
+            {canCancel && (
+              <Button
+                variant="quiet"
+                size="tap"
+                disabled={running || pot.agent_busy}
+                onClick={async () => {
+                  setRunning(true);
+                  try { await runKittyNow({ data: { slug, adminToken: t } }); } catch (e) { toast.error(e instanceof Error ? e.message : "Kitty couldn't run just now."); } finally { setRunning(false); }
+                }}
+              >
+                {running || pot.agent_busy ? "Kitty's working..." : "Run Kitty now"}
+              </Button>
+            )}
+          </div>
         </div>
 
         {cancelled && <Cancelled />}
@@ -93,6 +111,7 @@ function ManagePage() {
         )}
       </main>
 
+      {editing && <EditProfile open={editing} onOpenChange={setEditing} slug={slug} adminToken={t} name={pot.recipient_name} likes={pot.likes} dislikes={pot.dislikes} wishlist={pot.wishlist_url} />}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent className="rounded-[14px]">
           <AlertDialogHeader>

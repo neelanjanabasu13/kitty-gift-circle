@@ -8,7 +8,8 @@ import { Chip, Segmented } from "@/components/kitty/Chip";
 import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
 import { PotMeter } from "@/components/kitty/PotMeter";
-import { Deadline, PotLive } from "@/components/kitty/PotLive";
+import { Deadline, PicksGrid, PotLive, topPicks } from "@/components/kitty/PotLive";
+import { CommissionNote } from "@/components/kitty/PickCard";
 import { PayPalHold } from "@/components/kitty/PayPalHold";
 import { AgentTicker } from "@/components/kitty/AgentFeed";
 import { MoneyPill } from "@/components/kitty/Money";
@@ -16,7 +17,7 @@ import { Cancelled, SuccessTick } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { INTERESTS } from "@/lib/config";
 import { amountChips, formatMoney, suggestedAmount } from "@/lib/kitty";
-import { authorizeContribution, createContributionOrder, withdrawContribution } from "@/lib/kitty.functions";
+import { authorizeContribution, createContributionOrder, triggerAgent, withdrawContribution } from "@/lib/kitty.functions";
 
 export const Route = createFileRoute("/k/$slug")({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(potQuery(params.slug)),
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/k/$slug")({
   component: ContributorPage,
 });
 
-type Mine = { contributionId: string; orderId: string; amount: number; withdrawn?: boolean; voted?: boolean };
+type Mine = { contributionId: string; orderId: string; authorizationId?: string | null; amount: number; withdrawn?: boolean; voted?: boolean };
 const VIS = [
   { value: "named", label: "Named" },
   { value: "anonymous", label: "Anonymous" },
@@ -79,6 +80,13 @@ function ContributorPage() {
               <p className="text-[16px] text-muted-foreground">You're only charged if the gift happens. {pot.organiser_name} is organising.</p>
             </div>
             <PotMeter raised={data.raised} target={pot.target_amount} currency={pot.currency} people={data.people} footer={<Deadline at={pot.deadline_at} />} />
+            {topPicks(data).length > 0 && (
+              <section className="space-y-3">
+                <p className="text-[15px] font-medium">Kitty's picks so far</p>
+                <PicksGrid view={data} compact />
+                <CommissionNote />
+              </section>
+            )}
             {closed ? (
               <p className="border-t pt-6 text-[15px] text-muted-foreground">This kitty has stopped taking contributions.</p>
             ) : (
@@ -197,7 +205,8 @@ function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: {
               setFinishing(true);
               try {
                 const r = await authorizeContribution({ data: { orderId } });
-                onDone({ contributionId: r.contributionId, orderId, amount: r.amount, voted: cats.length > 0 });
+                onDone({ contributionId: r.contributionId, orderId, authorizationId: r.authorizationId ?? null, amount: r.amount, voted: cats.length > 0 });
+                void triggerAgent({ data: { contributionId: r.contributionId } }).catch(() => {});
                 window.scrollTo({ top: 0, behavior: "smooth" });
               } catch (e) {
                 setFinishing(false);
@@ -222,7 +231,10 @@ function Success({ mine, currency, canWithdraw, onWithdrawn, name }: { mine: Min
         <h1 className="text-[44px] md:text-[56px]"><span className="tabular">{amt}</span> held, <em>not charged.</em></h1>
         <p className="text-[16px] text-muted-foreground">If the gift for {name} falls through, the hold drops off.</p>
       </div>
-      <p className="font-mono text-[12px] text-muted-foreground">PayPal order <span className="text-foreground">{mine.orderId}</span></p>
+      <div className="space-y-1 font-mono text-[12px] text-muted-foreground">
+        <p>PayPal order <span className="text-foreground">{mine.orderId}</span></p>
+        {mine.authorizationId && <p>Authorisation <span className="text-foreground">{mine.authorizationId}</span></p>}
+      </div>
       <AgentTicker text={mine.voted ? "Re-ranking with your vote..." : "Added to the pot. Watching for gifts..."} className="max-w-sm" />
       {canWithdraw && (
         <button
@@ -234,6 +246,7 @@ function Success({ mine, currency, canWithdraw, onWithdrawn, name }: { mine: Min
             try {
               await withdrawContribution({ data: { contributionId: mine.contributionId, orderId: mine.orderId } });
               toast.success(`Your ${amt} hold has been released. Nothing was charged.`);
+              void triggerAgent({ data: { contributionId: mine.contributionId } }).catch(() => {});
               onWithdrawn();
             } catch (e) {
               toast.error(e instanceof Error ? e.message : "Couldn't withdraw just now. Try again.");
