@@ -12,6 +12,8 @@ import { Cancelled } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { cancelPot, runKittyNow } from "@/lib/kitty.functions";
 import { EditProfile } from "@/components/kitty/EditProfile";
+import { ClosingStage, useTick } from "@/components/kitty/Closing";
+import { formatMoney } from "@/lib/kitty";
 
 export const Route = createFileRoute("/k/$slug_/manage")({
   validateSearch: (s: Record<string, unknown>) => ({ t: typeof s["t"] === "string" ? (s["t"] as string) : "" }),
@@ -33,6 +35,7 @@ function ManagePage() {
   const { slug } = Route.useParams();
   const { t } = Route.useSearch();
   const { data, refetch } = useLivePot(slug, t);
+  useTick(data);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -52,6 +55,7 @@ function ManagePage() {
   const { pot } = data;
   const cancelled = pot.status === "cancelled";
   const canCancel = ["collecting", "voting", "veto"].includes(pot.status);
+  const canRun = pot.status === "collecting";
 
   return (
     <div className="min-h-screen">
@@ -82,7 +86,7 @@ function ManagePage() {
           <p className="text-[13px] text-muted-foreground">{pot.organiser_name}'s kitty</p>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <h1 className="mt-1 text-[44px] md:text-[64px]">For <em>{pot.recipient_name}</em></h1>
-            {canCancel && (
+            {canRun && (
               <Button
                 variant="quiet"
                 size="tap"
@@ -99,6 +103,22 @@ function ManagePage() {
         </div>
 
         {cancelled && <Cancelled />}
+        {pot.status === "done" && data.receipt?.gift && (
+          <section className="mx-auto max-w-xl space-y-4 text-center">
+            <h2 className="text-[40px]">{data.receipt.payout?.status === "fallback" ? <>Paid for. <em>Ready to buy.</em></> : <><span className="tabular">{formatMoney(data.receipt.gift.price, pot.currency, { exact: true })}</span> is in <em>your PayPal.</em></>}</h2>
+            <p className="text-[15px] text-muted-foreground">
+              {data.receipt.payout?.status === "fallback"
+                ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.`
+                : `Tap to buy it at ${data.receipt.gift.retailer ?? "the shop"}.`}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {data.receipt.gift.offer_url && <Button asChild variant="ink" size="xl"><a href={data.receipt.gift.offer_url} target="_blank" rel="noreferrer sponsored">Buy it at {data.receipt.gift.retailer ?? "the shop"}</a></Button>}
+              <Button asChild variant="quiet" size="xl"><Link to="/k/$slug/receipt" params={{ slug }}>Receipt</Link></Button>
+              <Button asChild variant="quiet" size="xl"><Link to="/k/$slug/card" params={{ slug }}>The card</Link></Button>
+            </div>
+          </section>
+        )}
+        {pot.status !== "done" && <ClosingStage view={data} adminToken={t} />}
         <PotLive view={data} />
 
         {pot.likes.length > 0 && (

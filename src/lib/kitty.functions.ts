@@ -7,6 +7,7 @@ import { DEFAULT_CURRENCY } from "./config";
 
 const admin = async () => (await import("@/integrations/supabase/client.server")).supabaseAdmin;
 const pp = () => import("./paypal.server");
+const closing = () => import("./closing.server");
 
 function randomToken(bytes = 24) {
   const a = new Uint8Array(bytes);
@@ -144,6 +145,49 @@ async function loadPot(slug: string, adminToken?: string) {
     wishlistImageUrl = s?.signedUrl ?? null;
   }
 
+  // ---------- closing state ----------
+  const { currentDecision, voteState } = await closing();
+  const dec = ["veto", "buying", "done"].includes(pot.status) ? await currentDecision(pot.id) : null;
+  const candById = new Map((candidates ?? []).map((c) => [c.id, c]));
+  let decision: null | { id: string; buy_at: string | null; why: string | null; decided_by: string | null; total_seconds: number | null; pick: { id: string; title: string; price: number; retailer: string | null; offer_url: string | null; image_url: string | null } | null } = null;
+  if (dec) {
+    const c = dec.candidate_id ? candById.get(dec.candidate_id) : undefined;
+    decision = { id: dec.id, buy_at: dec.buy_at, why: dec.why, decided_by: dec.decided_by, total_seconds: dec.total_seconds, pick: c ? { id: c.id, title: c.title, price: Number(c.price), retailer: c.retailer, offer_url: c.offer_url, image_url: c.image_url } : null };
+  }
+  const vs = pot.status === "voting" ? await voteState(pot) : null;
+  const vote = vs
+    ? { closesAt: pot.vote_closes_at as string | null, eligible: vs.eligible, voted: vs.voted, picks: vs.ids.map((id) => candById.get(id)).filter(Boolean).map((c) => ({ id: c!.id, title: c!.title, price: Number(c!.price), retailer: c!.retailer, image_url: c!.image_url, total_score: c!.total_score != null ? Number(c!.total_score) : null, votes: vs.tally[c!.id] ?? 0 })) }
+    : null;
+
+  let receipt: null | {
+    gift: { title: string; retailer: string | null; price: number; offer_url: string | null; image_url: string | null } | null;
+    held: number; paid: number; released: number;
+    payments: { id: string; name: string | null; amount: number | null; capture_id: string | null }[];
+    payout: { batch_id: string | null; item_id: string | null; status: string | null; amount: number | null; buy_url: string | null } | null;
+  } = null;
+  if (pot.status === "done") {
+    const [{ data: paidRows }, { data: po }] = await Promise.all([
+      db.from("contributions").select("id, display_name, visibility, amount, captured_amount, capture_id, status").eq("pot_id", pot.id).in("status", ["captured", "voided"]).not("planned_capture", "is", null).order("created_at"),
+      db.from("payouts").select("*").eq("pot_id", pot.id).maybeSingle(),
+    ]);
+    const rows = paidRows ?? [];
+    const held = rows.reduce((s, r) => s + Number(r.amount), 0);
+    const paid = rows.filter((r) => r.status === "captured").reduce((s, r) => s + Number(r.captured_amount ?? 0), 0);
+    receipt = {
+      gift: decision?.pick ? { title: decision.pick.title, retailer: decision.pick.retailer, price: decision.pick.price, offer_url: po?.buy_url ?? decision.pick.offer_url, image_url: decision.pick.image_url } : null,
+      held: Math.round(held * 100) / 100,
+      paid: Math.round(paid * 100) / 100,
+      released: Math.max(0, Math.round((held - paid) * 100) / 100),
+      payments: rows.filter((r) => r.status === "captured").map((r) => ({
+        id: r.id,
+        name: r.visibility === "anonymous" && !isAdmin ? null : r.display_name || null,
+        amount: r.visibility === "amount_hidden" && !isAdmin ? null : Number(r.captured_amount ?? 0),
+        capture_id: r.capture_id,
+      })),
+      payout: po ? { batch_id: po.payout_batch_id, item_id: po.item_id, status: po.status, amount: po.amount != null ? Number(po.amount) : null, buy_url: po.buy_url } : null,
+    };
+  }
+
   return {
     isAdmin,
     pot: {
@@ -168,7 +212,12 @@ async function loadPot(slug: string, adminToken?: string) {
       agent_working: pot.agent_working,
       agent_busy: !!pot.agent_lock_at && Date.now() - new Date(pot.agent_lock_at).getTime() < 120_000,
       created_at: pot.created_at,
+      demo_speed: pot.demo_speed,
+      closed_at: pot.closed_at,
     },
+    decision,
+    vote,
+    receipt,
     wishlistImageUrl,
     raised,
     people: live.length,
@@ -300,7 +349,7 @@ export const withdrawContribution = createServerFn({ method: "POST" })
     if (!c.authorization_id) throw new Error("There's no hold to release.");
     const { voidAuthorization, plainPayPalError } = await pp();
     try {
-      await voidAuthorization(c.authorization_id);
+      await voidAuthorization(c.authorization_id, `void-${c.id}`);
     } catch (e) {
       throw new Error(plainPayPalError(e));
     }
@@ -324,23 +373,8 @@ export const cancelPot = createServerFn({ method: "POST" })
     const pot = await requireAdmin(data.slug, data.adminToken);
     if (pot.status === "cancelled") return { released: 0, failed: 0 };
     if (!["collecting", "voting", "veto"].includes(pot.status)) throw new Error("Kitty has already bought the gift, so it can't be cancelled.");
-    const db = await admin();
-    const { data: holds } = await db.from("contributions").select("id, authorization_id").eq("pot_id", pot.id).in("status", ["authorized", "reauthorized"]);
-    const { voidAuthorization } = await pp();
-    let released = 0;
-    let failed = 0;
-    for (const h of holds ?? []) {
-      try {
-        if (h.authorization_id) await voidAuthorization(h.authorization_id);
-        await db.from("contributions").update({ status: "voided" }).eq("id", h.id);
-        released++;
-      } catch (e) {
-        console.error("void failed", h.id, e);
-        failed++;
-      }
-    }
-    await db.from("pots").update({ status: "cancelled" }).eq("id", pot.id);
-    await logEvent(pot.id, "pot_cancelled", `Kitty's off. ${released} hold${released === 1 ? "" : "s"} released and nobody was charged.`, { released, failed });
+    const { voidAllAndCancel } = await closing();
+    const { released, failed } = await voidAllAndCancel(pot.id);
     return { released, failed };
   });
 
@@ -417,7 +451,10 @@ export const runKittyNow = createServerFn({ method: "POST" })
     const pot = await requireAdmin(data.slug, data.adminToken);
     await logEvent(pot.id, "manual_run", "Organiser asked me to take another look.");
     const { runAgent } = await agent();
-    return runAgent(pot.id, { kind: "manual" });
+    const r = await runAgent(pot.id, { kind: "manual" });
+    const { tickPot: tick } = await closing();
+    await tick(pot.id);
+    return r;
   });
 
 export const updatePotProfile = createServerFn({ method: "POST" })
@@ -437,4 +474,108 @@ export const updatePotProfile = createServerFn({ method: "POST" })
     await logEvent(pot.id, "profile_updated", `Got it. Updated what ${pot.recipient_name} is into. Re-planning from scratch.`);
     const { runAgent } = await agent();
     return runAgent(pot.id, { kind: "replan" });
+  });
+
+// ---------- closing: tick, vote, veto, extend ----------
+export const tickPot = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("id, status").eq("slug", data.slug).maybeSingle();
+    if (!pot) return { status: "missing" };
+    if (["done", "cancelled"].includes(pot.status)) return { status: pot.status };
+    const { tickPot: tick } = await closing();
+    return tick(pot.id);
+  });
+
+async function ownContribution(contributionId: string, orderId: string) {
+  const db = await admin();
+  const { data: c } = await db.from("contributions").select("id, pot_id, status, paypal_order_id").eq("id", contributionId).maybeSingle();
+  if (!c || c.paypal_order_id !== orderId) throw new Error("We couldn't find your hold on this kitty.");
+  return c;
+}
+
+export const castFinalVote = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ contributionId: z.string().uuid(), orderId: z.string().min(5).max(60), candidateId: z.string().uuid().nullable() }).parse(d))
+  .handler(async ({ data }) => {
+    const c = await ownContribution(data.contributionId, data.orderId);
+    if (!["authorized", "reauthorized"].includes(c.status)) throw new Error("Only people with a live hold can vote.");
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("id, status, vote_candidate_ids").eq("id", c.pot_id).single();
+    if (pot?.status !== "voting") throw new Error("The vote has closed.");
+    if (data.candidateId === null) {
+      await db.from("contributions").update({ final_vote_opt_out: true }).eq("id", c.id);
+      await db.from("final_votes").delete().eq("contribution_id", c.id);
+    } else {
+      if (!(pot.vote_candidate_ids ?? []).includes(data.candidateId)) throw new Error("That pick isn't in the vote.");
+      await db.from("contributions").update({ final_vote_opt_out: false }).eq("id", c.id);
+      const { error } = await db.from("final_votes").upsert({ pot_id: pot.id, contribution_id: c.id, candidate_id: data.candidateId }, { onConflict: "contribution_id" });
+      if (error) throw new Error("Your vote didn't save. Try again.");
+    }
+    const { tickPot: tick } = await closing();
+    await tick(pot.id);
+    return { ok: true };
+  });
+
+export const getMyVote = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ contributionId: z.string().uuid(), orderId: z.string().min(5).max(60) }).parse(d))
+  .handler(async ({ data }) => {
+    const c = await ownContribution(data.contributionId, data.orderId);
+    const db = await admin();
+    const [{ data: v }, { data: me }] = await Promise.all([
+      db.from("final_votes").select("candidate_id").eq("contribution_id", c.id).maybeSingle(),
+      db.from("contributions").select("final_vote_opt_out, status, captured_amount, amount").eq("id", c.id).single(),
+    ]);
+    return { candidateId: v?.candidate_id ?? null, optedOut: !!me?.final_vote_opt_out, status: me?.status ?? c.status, captured: me?.captured_amount != null ? Number(me.captured_amount) : null };
+  });
+
+export const organiserDecide = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ slug: z.string().max(80), adminToken: z.string().max(100), action: z.enum(["swap", "buy_now", "cancel"]), candidateId: z.string().uuid().optional() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const p = await requireAdmin(data.slug, data.adminToken);
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("*").eq("id", p.id).single();
+    const c = await closing();
+    if (data.action === "cancel") {
+      if (!["collecting", "voting", "veto"].includes(pot!.status)) throw new Error("Kitty is already buying, so it can't be cancelled now.");
+      await logEvent(pot!.id, "vetoed", `${pot!.organiser_name} vetoed the gift and called the kitty off.`);
+      return c.voidAllAndCancel(pot!.id);
+    }
+    if (pot!.status !== "veto") throw new Error("There's no countdown running right now.");
+    const dec = await c.currentDecision(pot!.id);
+    if (data.action === "buy_now") {
+      if (dec) await db.from("decisions").update({ buy_at: new Date().toISOString() }).eq("id", dec.id);
+      await logEvent(pot!.id, "buy_now", `${pot!.organiser_name} said buy it now.`);
+      await c.tickPot(pot!.id);
+      return { released: 0, failed: 0 };
+    }
+    if (!data.candidateId || data.candidateId === dec?.candidate_id) throw new Error("Pick a different gift to swap to.");
+    const { data: pick } = await db.from("candidates").select("*").eq("id", data.candidateId).eq("pot_id", pot!.id).single();
+    const { data: live } = await db.from("contributions").select("amount").eq("pot_id", pot!.id).in("status", ["authorized", "reauthorized"]);
+    const total = (live ?? []).reduce((s, x) => s + Number(x.amount), 0);
+    if (!pick || Number(pick.price) > total) throw new Error("The pot doesn't cover that gift.");
+    await logEvent(pot!.id, "swapped", `${pot!.organiser_name} swapped to ${pick.title.slice(0, 60)}. Countdown restarted.`);
+    await c.startVeto(pot, pick, "organiser", undefined, { from: dec });
+    return { released: 0, failed: 0 };
+  });
+
+export const extendDeadline = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100), days: z.union([z.literal(1), z.literal(3)]) }).parse(d))
+  .handler(async ({ data }) => {
+    const p = await requireAdmin(data.slug, data.adminToken);
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("*").eq("id", p.id).single();
+    if (!["collecting", "voting", "veto"].includes(pot!.status)) throw new Error("It's too late to extend this kitty.");
+    const { data: live } = await db.from("contributions").select("amount").eq("pot_id", pot!.id).in("status", ["authorized", "reauthorized"]);
+    const total = (live ?? []).reduce((s, x) => s + Number(x.amount), 0);
+    if (total >= Number(pot!.target_amount)) throw new Error("The pot's already full, so there's nothing to wait for.");
+    const base = Math.max(Date.now(), new Date(pot!.deadline_at).getTime());
+    const deadline = new Date(base + data.days * 86400_000).toISOString();
+    await db.from("decisions").update({ vetoed_at: new Date().toISOString() }).eq("pot_id", pot!.id).is("vetoed_at", null);
+    await db.from("final_votes").delete().eq("pot_id", pot!.id);
+    await db.from("pots").update({ status: "collecting", deadline_at: deadline, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null }).eq("id", pot!.id);
+    await logEvent(pot!.id, "extended", `Deadline pushed back ${data.days === 1 ? "a day" : "3 days"}. Kitty's collecting again, and every hold is still only held.`);
+    return { deadline };
   });

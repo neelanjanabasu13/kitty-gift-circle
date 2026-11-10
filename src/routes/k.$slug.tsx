@@ -14,6 +14,8 @@ import { PayPalHold } from "@/components/kitty/PayPalHold";
 import { AgentTicker } from "@/components/kitty/AgentFeed";
 import { MoneyPill } from "@/components/kitty/Money";
 import { Cancelled, SuccessTick } from "@/components/kitty/Stages";
+import { ClosingStage, useTick } from "@/components/kitty/Closing";
+import { Link } from "@tanstack/react-router";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { INTERESTS } from "@/lib/config";
 import { amountChips, formatMoney, suggestedAmount } from "@/lib/kitty";
@@ -47,6 +49,7 @@ const VIS = [
 function ContributorPage() {
   const { slug } = Route.useParams();
   const { data } = useLivePot(slug);
+  useTick(data);
   const [mine, setMine] = useState<Mine | null>(null);
   const key = `kitty:mine:${slug}`;
 
@@ -71,6 +74,11 @@ function ContributorPage() {
       <main className="mx-auto max-w-6xl px-5 pb-20 md:px-8">
         {pot.status === "cancelled" ? (
           <Cancelled />
+        ) : pot.status !== "collecting" ? (
+          <div className="pt-10">
+            <ClosingStage view={data} mine={mine && !mine.withdrawn ? mine : null} />
+            {pot.status === "done" && <p className="mt-2 text-center"><Link to="/k/$slug/card" params={{ slug }} className="min-h-11 text-[14px] text-muted-foreground underline underline-offset-4">Open the card for {pot.recipient_name}</Link></p>}
+          </div>
         ) : mine && !mine.withdrawn ? (
           <Success mine={mine} currency={pot.currency} canWithdraw={pot.status === "collecting"} onWithdrawn={() => saveMine({ ...mine, withdrawn: true })} name={pot.recipient_name} />
         ) : (

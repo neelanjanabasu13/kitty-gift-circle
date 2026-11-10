@@ -57,3 +57,18 @@ export async function scoreCandidates(p: Profile, categories: string[], items: {
     dislike: !!s.dislike,
   }));
 }
+
+/** One warm why-line for the veto screen. Falls back to plain facts if AI is unavailable. */
+export async function explainChoice(o: { name: string; likes: string[]; title: string; retailer: string | null; votes: number; voters: number; reason: string | null }): Promise<string> {
+  const fallback = `${o.votes ? `${o.votes} of ${o.voters} voted for it. ` : ""}${o.reason ?? `It fits what ${o.name} is into.`}${o.retailer ? ` In stock at ${o.retailer}.` : ""}`;
+  try {
+    const out = await askJson<{ why: string }>(
+      'Write ONE warm, plain-English line (under 150 characters, UK spelling, no em dashes) explaining why this group gift was chosen. Mention the vote count if any voted, one of the recipient\'s likes, and the shop. Return JSON {"why": string}. Example: "8 of 12 voted for it. It fits her cooking and cast-iron likes, and it\'s in stock at John Lewis."',
+      JSON.stringify(o),
+    );
+    const w = String(out.why ?? "").replace(/\u2014/g, ",").trim();
+    return w ? w.slice(0, 200) : fallback;
+  } catch {
+    return fallback;
+  }
+}

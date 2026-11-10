@@ -15,6 +15,13 @@
       "when": 1794314446219,
       "tag": "0001_agent_state",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794315029122,
+      "tag": "0002_closing_and_money",
+      "breakpoints": true
     }
   ]
 }

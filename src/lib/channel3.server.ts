@@ -77,3 +77,30 @@ export async function lookupByUrl(url: string): Promise<{ status: "ok"; product:
     return { status: "error", message: "Lookup is unreachable right now" };
   }
 }
+
+export type Refresh = { status: "ok"; price: number; inStock: boolean; url: string } | { status: "gone" } | { status: "not_configured" } | { status: "error" };
+
+/**
+ * Pre-buy refresh: re-fetch a product by id (falling back to a title search) and return the current
+ * offer at the same retailer if possible, otherwise the cheapest in-stock offer.
+ */
+export async function refreshOffer(o: { productId: string; title: string; retailer: string | null; potId: string; maxPrice: number }): Promise<Refresh> {
+  const key = process.env["CHANNEL3_API_KEY"];
+  if (!key) return { status: "not_configured" };
+  let product: Product | null = null;
+  try {
+    const res = await fetch(`${BASE}/products/${encodeURIComponent(o.productId)}`, { headers: { "x-api-key": key, "x-user-id": o.potId } });
+    if (res.ok) product = mapProduct(await res.json());
+  } catch { /* fall through to search */ }
+  if (!product) {
+    const r = await searchProducts({ query: o.title, potId: o.potId, minPrice: 0, maxPrice: o.maxPrice * 2, limit: 10 });
+    if (r.status === "error") return { status: "error" };
+    if (r.status === "not_configured") return { status: "not_configured" };
+    product = r.products.find((p) => p.id === o.productId) ?? null;
+  }
+  if (!product) return { status: "gone" };
+  const same = product.offers.find((x) => x.domain === o.retailer);
+  const best = same && same.inStock ? same : product.offers.filter((x) => x.inStock).sort((a, b) => a.price - b.price)[0] ?? same;
+  if (!best) return { status: "gone" };
+  return { status: "ok", price: best.price, inStock: best.inStock, url: best.url };
+}

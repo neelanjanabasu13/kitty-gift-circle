@@ -2,10 +2,11 @@ import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
-export function Chip({ selected, onClick, children, className, tag }: { selected?: boolean; onClick?: () => void; children: ReactNode; className?: string | undefined; tag?: string | undefined; tone?: string }) {
+export function Chip({ selected, onClick, children, className, tag, disabled }: { selected?: boolean; onClick?: () => void; children: ReactNode; className?: string | undefined; tag?: string | undefined; tone?: string; disabled?: boolean }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       aria-pressed={selected}
       onClick={onClick}
       className={cn(

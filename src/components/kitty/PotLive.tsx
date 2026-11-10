@@ -22,7 +22,10 @@ export function Deadline({ at }: { at: string }) {
 /** Builds the agent's current status and the honest 'up next' list from what we know today. */
 export function agentNarration(view: PotView) {
   const { pot, raised, candidates } = view;
-  if (pot.status === "cancelled") return { working: undefined, upNext: [] as string[] };
+  if (pot.status === "cancelled" || pot.status === "done") return { working: undefined, upNext: [] as string[] };
+  if (pot.status === "voting") return { working: pot.agent_working ?? "Counting votes as they come in...", upNext: ["Start the veto countdown with the winner"] };
+  if (pot.status === "veto") return { working: pot.agent_working ?? "Counting down. Ready to buy if nobody vetoes.", upNext: ["Re-check the price and every hold", "Take each share and pay out"] };
+  if (pot.status === "buying") return { working: pot.agent_working ?? "Buying the gift...", upNext: ["Send the receipt"] };
   const topic = pot.likes[0] ?? "thoughtful";
   const ranked = candidates.some((c) => c.rank != null);
   let working: string | undefined;

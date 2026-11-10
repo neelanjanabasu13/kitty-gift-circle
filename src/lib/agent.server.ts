@@ -59,7 +59,7 @@ export async function runAgent(potId: string, trigger: Trigger) {
 async function runOnce(potId: string, trigger: Trigger) {
   const db = await admin();
   const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
-  if (!pot || !["collecting", "voting"].includes(pot.status)) return;
+  if (!pot || pot.status !== "collecting") return;
 
   const { data: live } = await db.from("contributions").select("id, amount").eq("pot_id", potId).in("status", LIVE);
   const raised = (live ?? []).reduce((s, c) => s + Number(c.amount), 0);
@@ -210,3 +210,32 @@ async function rerank(potId: string, raised: number, tally: Record<string, numbe
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const short = (t: string) => (t.length > 48 ? `${t.slice(0, 46).trim()}...` : t);
+
+/** Final search at close: search at the exact authorised pot, then re-rank. Returns ranked count. */
+export async function finalSearch(potId: string, raised: number) {
+  const db = await admin();
+  const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
+  if (!pot) return 0;
+  const { data: live } = await db.from("contributions").select("id").eq("pot_id", potId).in("status", LIVE);
+  const liveIds = new Set((live ?? []).map((c) => c.id));
+  const { data: votes } = await db.from("category_votes").select("category, contribution_id").eq("pot_id", potId);
+  const tally: Record<string, number> = {};
+  for (const v of votes ?? []) if (v.contribution_id && liveIds.has(v.contribution_id)) tally[v.category] = (tally[v.category] ?? 0) + 1;
+  await say(potId, "final_search", `Pot's closed at ${formatMoney(raised, pot.currency)}. One last search at exactly that.`);
+  try {
+    await search(potId, pot, raised, topCategories(tally), false);
+  } catch (e) {
+    console.error("final search failed", e);
+  }
+  await rerank(potId, raised, tally, { kind: "manual" }, pot.currency);
+  await working(potId, null);
+  const { count } = await db.from("candidates").select("id", { count: "exact", head: true }).eq("pot_id", potId).not("rank", "is", null);
+  return count ?? 0;
+}
+
+/** Re-rank cached candidates against a new total (after holds drop off). */
+export async function rerankAt(potId: string, raised: number) {
+  const db = await admin();
+  const { data: pot } = await db.from("pots").select("currency").eq("id", potId).single();
+  await rerank(potId, raised, {}, { kind: "withdrawn" }, pot?.currency ?? "GBP");
+}

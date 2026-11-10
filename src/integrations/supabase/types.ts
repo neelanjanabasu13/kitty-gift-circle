@@ -207,11 +207,15 @@ export type Database = {
           captured_amount: number | null
           created_at: string
           display_name: string
+          final_vote_opt_out: boolean
           honor_expires_at: string | null
           id: string
           is_seeded: boolean
           paypal_order_id: string | null
+          planned_capture: number | null
           pot_id: string
+          reauth_count: number
+          refund_id: string | null
           status: string
           visibility: string
         }
@@ -223,11 +227,15 @@ export type Database = {
           captured_amount?: number | null
           created_at?: string
           display_name?: string
+          final_vote_opt_out?: boolean
           honor_expires_at?: string | null
           id?: string
           is_seeded?: boolean
           paypal_order_id?: string | null
+          planned_capture?: number | null
           pot_id: string
+          reauth_count?: number
+          refund_id?: string | null
           status?: string
           visibility?: string
         }
@@ -239,11 +247,15 @@ export type Database = {
           captured_amount?: number | null
           created_at?: string
           display_name?: string
+          final_vote_opt_out?: boolean
           honor_expires_at?: string | null
           id?: string
           is_seeded?: boolean
           paypal_order_id?: string | null
+          planned_capture?: number | null
           pot_id?: string
+          reauth_count?: number
+          refund_id?: string | null
           status?: string
           visibility?: string
         }
@@ -266,7 +278,9 @@ export type Database = {
           id: string
           pot_id: string
           swapped_to: string | null
+          total_seconds: number | null
           vetoed_at: string | null
+          why: string | null
         }
         Insert: {
           buy_at?: string | null
@@ -276,7 +290,9 @@ export type Database = {
           id?: string
           pot_id: string
           swapped_to?: string | null
+          total_seconds?: number | null
           vetoed_at?: string | null
+          why?: string | null
         }
         Update: {
           buy_at?: string | null
@@ -286,7 +302,9 @@ export type Database = {
           id?: string
           pot_id?: string
           swapped_to?: string | null
+          total_seconds?: number | null
           vetoed_at?: string | null
+          why?: string | null
         }
         Relationships: [
           {
@@ -363,6 +381,7 @@ export type Database = {
           amount: number | null
           buy_url: string | null
           created_at: string
+          error: string | null
           id: string
           item_id: string | null
           payout_batch_id: string | null
@@ -373,6 +392,7 @@ export type Database = {
           amount?: number | null
           buy_url?: string | null
           created_at?: string
+          error?: string | null
           id?: string
           item_id?: string | null
           payout_batch_id?: string | null
@@ -383,6 +403,7 @@ export type Database = {
           amount?: number | null
           buy_url?: string | null
           created_at?: string
+          error?: string | null
           id?: string
           item_id?: string | null
           payout_batch_id?: string | null
@@ -405,6 +426,8 @@ export type Database = {
           agent_lock_at: string | null
           agent_pending: boolean
           agent_working: string | null
+          close_search_at: string | null
+          closed_at: string | null
           closeness: string
           created_at: string
           currency: string
@@ -425,6 +448,9 @@ export type Database = {
           slug: string
           status: string
           target_amount: number
+          tick_lock_at: string | null
+          vote_candidate_ids: string[]
+          vote_closes_at: string | null
           vote_window: string
           wishlist_image_path: string | null
           wishlist_url: string | null
@@ -434,6 +460,8 @@ export type Database = {
           agent_lock_at?: string | null
           agent_pending?: boolean
           agent_working?: string | null
+          close_search_at?: string | null
+          closed_at?: string | null
           closeness: string
           created_at?: string
           currency?: string
@@ -454,6 +482,9 @@ export type Database = {
           slug: string
           status?: string
           target_amount: number
+          tick_lock_at?: string | null
+          vote_candidate_ids?: string[]
+          vote_closes_at?: string | null
           vote_window?: string
           wishlist_image_path?: string | null
           wishlist_url?: string | null
@@ -463,6 +494,8 @@ export type Database = {
           agent_lock_at?: string | null
           agent_pending?: boolean
           agent_working?: string | null
+          close_search_at?: string | null
+          closed_at?: string | null
           closeness?: string
           created_at?: string
           currency?: string
@@ -483,6 +516,9 @@ export type Database = {
           slug?: string
           status?: string
           target_amount?: number
+          tick_lock_at?: string | null
+          vote_candidate_ids?: string[]
+          vote_closes_at?: string | null
           vote_window?: string
           wishlist_image_path?: string | null
           wishlist_url?: string | null

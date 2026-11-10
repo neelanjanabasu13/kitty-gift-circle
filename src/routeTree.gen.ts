@@ -14,8 +14,11 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as PreviewRouteImport } from './routes/preview'
 import { Route as StartRouteImport } from './routes/start'
 import { Route as KSlugRouteImport } from './routes/k.$slug'
+import { Route as KSlugCardRouteImport } from './routes/k.$slug_.card'
 import { Route as KSlugManageRouteImport } from './routes/k.$slug_.manage'
+import { Route as KSlugReceiptRouteImport } from './routes/k.$slug_.receipt'
 import { Route as KSlugShareRouteImport } from './routes/k.$slug_.share'
+import { Route as ApiPublicJobsTickPotsRouteImport } from './routes/api/public/jobs/tick-pots'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -42,14 +45,29 @@ const KSlugRoute = KSlugRouteImport.update({
   path: '/k/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KSlugCardRoute = KSlugCardRouteImport.update({
+  id: '/k/$slug_/card',
+  path: '/k/$slug/card',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KSlugManageRoute = KSlugManageRouteImport.update({
   id: '/k/$slug_/manage',
   path: '/k/$slug/manage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KSlugReceiptRoute = KSlugReceiptRouteImport.update({
+  id: '/k/$slug_/receipt',
+  path: '/k/$slug/receipt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KSlugShareRoute = KSlugShareRouteImport.update({
   id: '/k/$slug_/share',
   path: '/k/$slug/share',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicJobsTickPotsRoute = ApiPublicJobsTickPotsRouteImport.update({
+  id: '/api/public/jobs/tick-pots',
+  path: '/api/public/jobs/tick-pots',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -59,8 +77,11 @@ export interface FileRoutesByFullPath {
   '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
+  '/k/$slug/card': typeof KSlugCardRoute
   '/k/$slug/manage': typeof KSlugManageRoute
+  '/k/$slug/receipt': typeof KSlugReceiptRoute
   '/k/$slug/share': typeof KSlugShareRoute
+  '/api/public/jobs/tick-pots': typeof ApiPublicJobsTickPotsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -68,8 +89,11 @@ export interface FileRoutesByTo {
   '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
+  '/k/$slug/card': typeof KSlugCardRoute
   '/k/$slug/manage': typeof KSlugManageRoute
+  '/k/$slug/receipt': typeof KSlugReceiptRoute
   '/k/$slug/share': typeof KSlugShareRoute
+  '/api/public/jobs/tick-pots': typeof ApiPublicJobsTickPotsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -78,8 +102,11 @@ export interface FileRoutesById {
   '/preview': typeof PreviewRoute
   '/start': typeof StartRoute
   '/k/$slug': typeof KSlugRoute
+  '/k/$slug_/card': typeof KSlugCardRoute
   '/k/$slug_/manage': typeof KSlugManageRoute
+  '/k/$slug_/receipt': typeof KSlugReceiptRoute
   '/k/$slug_/share': typeof KSlugShareRoute
+  '/api/public/jobs/tick-pots': typeof ApiPublicJobsTickPotsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -89,8 +116,11 @@ export interface FileRouteTypes {
     | '/preview'
     | '/start'
     | '/k/$slug'
+    | '/k/$slug/card'
     | '/k/$slug/manage'
+    | '/k/$slug/receipt'
     | '/k/$slug/share'
+    | '/api/public/jobs/tick-pots'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -98,8 +128,11 @@ export interface FileRouteTypes {
     | '/preview'
     | '/start'
     | '/k/$slug'
+    | '/k/$slug/card'
     | '/k/$slug/manage'
+    | '/k/$slug/receipt'
     | '/k/$slug/share'
+    | '/api/public/jobs/tick-pots'
   id:
     | '__root__'
     | '/'
@@ -107,8 +140,11 @@ export interface FileRouteTypes {
     | '/preview'
     | '/start'
     | '/k/$slug'
+    | '/k/$slug_/card'
     | '/k/$slug_/manage'
+    | '/k/$slug_/receipt'
     | '/k/$slug_/share'
+    | '/api/public/jobs/tick-pots'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -117,8 +153,11 @@ export interface RootRouteChildren {
   PreviewRoute: typeof PreviewRoute
   StartRoute: typeof StartRoute
   KSlugRoute: typeof KSlugRoute
+  KSlugCardRoute: typeof KSlugCardRoute
   KSlugManageRoute: typeof KSlugManageRoute
+  KSlugReceiptRoute: typeof KSlugReceiptRoute
   KSlugShareRoute: typeof KSlugShareRoute
+  ApiPublicJobsTickPotsRoute: typeof ApiPublicJobsTickPotsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -158,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/k/$slug_/card': {
+      id: '/k/$slug_/card'
+      path: '/k/$slug/card'
+      fullPath: '/k/$slug/card'
+      preLoaderRoute: typeof KSlugCardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/k/$slug_/manage': {
       id: '/k/$slug_/manage'
       path: '/k/$slug/manage'
@@ -165,11 +211,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KSlugManageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/k/$slug_/receipt': {
+      id: '/k/$slug_/receipt'
+      path: '/k/$slug/receipt'
+      fullPath: '/k/$slug/receipt'
+      preLoaderRoute: typeof KSlugReceiptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/k/$slug_/share': {
       id: '/k/$slug_/share'
       path: '/k/$slug/share'
       fullPath: '/k/$slug/share'
       preLoaderRoute: typeof KSlugShareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/jobs/tick-pots': {
+      id: '/api/public/jobs/tick-pots'
+      path: '/api/public/jobs/tick-pots'
+      fullPath: '/api/public/jobs/tick-pots'
+      preLoaderRoute: typeof ApiPublicJobsTickPotsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -181,8 +241,11 @@ const rootRouteChildren: RootRouteChildren = {
   PreviewRoute: PreviewRoute,
   StartRoute: StartRoute,
   KSlugRoute: KSlugRoute,
+  KSlugCardRoute: KSlugCardRoute,
   KSlugManageRoute: KSlugManageRoute,
+  KSlugReceiptRoute: KSlugReceiptRoute,
   KSlugShareRoute: KSlugShareRoute,
+  ApiPublicJobsTickPotsRoute: ApiPublicJobsTickPotsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

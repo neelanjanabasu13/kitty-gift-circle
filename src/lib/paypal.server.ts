@@ -78,11 +78,64 @@ export async function authorizeOrder(orderId: string) {
   return { status: res.status as string, authorizationId: auth?.id as string | undefined, expiresAt: auth?.expiration_time as string | undefined, authStatus: auth?.status as string | undefined };
 }
 
-export async function voidAuthorization(authorizationId: string) {
-  await paypal(`/v2/payments/authorizations/${authorizationId}/void`, {
+/** Void a hold. requestId should be 'void-' + contribution id. An already-voided hold counts as done. */
+export async function voidAuthorization(authorizationId: string, requestId = `void-${authorizationId}`) {
+  try {
+    await paypal(`/v2/payments/authorizations/${authorizationId}/void`, { method: "POST", requestId });
+  } catch (e) {
+    if (e instanceof PayPalError && /AUTHORIZATION_ALREADY_VOIDED|AUTHORIZATION_VOIDED|AUTHORIZATION_EXPIRED/.test(e.body)) return;
+    throw e;
+  }
+}
+
+const amt = (value: number, currency: string) => ({ currency_code: currency, value: value.toFixed(2) });
+
+export function getAuthorization(id: string) {
+  return paypal<{ id: string; status: string; expiration_time?: string }>(`/v2/payments/authorizations/${id}`);
+}
+
+export function reauthorize(id: string, amount: number, currency: string, requestId: string) {
+  return paypal<{ id: string; status: string; expiration_time?: string }>(`/v2/payments/authorizations/${id}/reauthorize`, {
     method: "POST",
-    requestId: `void-${authorizationId}`,
+    requestId,
+    body: { amount: amt(amount, currency) },
   });
+}
+
+export function captureAuthorization(id: string, amount: number, currency: string, requestId: string) {
+  return paypal<{ id: string; status: string }>(`/v2/payments/authorizations/${id}/capture`, {
+    method: "POST",
+    requestId,
+    body: { amount: amt(amount, currency), final_capture: true },
+  });
+}
+
+export function refundCapture(captureId: string, requestId: string, amount?: { value: number; currency: string }) {
+  return paypal<{ id: string; status: string }>(`/v2/payments/captures/${captureId}/refund`, {
+    method: "POST",
+    requestId,
+    body: amount ? { amount: amt(amount.value, amount.currency) } : {},
+  });
+}
+
+export async function createPayout(o: { batchId: string; email: string; amount: number; currency: string; note: string; itemId: string }) {
+  const res = await paypal<any>("/v1/payments/payouts", {
+    method: "POST",
+    requestId: o.batchId,
+    body: {
+      sender_batch_header: { sender_batch_id: o.batchId, email_subject: "Your Kitty gift money is here", email_message: o.note.slice(0, 255) },
+      items: [{ recipient_type: "EMAIL", receiver: o.email, amount: amt(o.amount, o.currency), note: o.note.slice(0, 4000), sender_item_id: o.itemId }],
+    },
+  });
+  const batchId = res?.batch_header?.payout_batch_id as string;
+  let itemId: string | null = null;
+  let status = (res?.batch_header?.batch_status as string) ?? "PENDING";
+  try {
+    const d = await paypal<any>(`/v1/payments/payouts/${batchId}`);
+    itemId = d?.items?.[0]?.payout_item_id ?? null;
+    status = d?.batch_header?.batch_status ?? status;
+  } catch { /* details are best-effort */ }
+  return { batchId, itemId, status };
 }
 
 /** Turn a PayPal failure into plain words for people. */
