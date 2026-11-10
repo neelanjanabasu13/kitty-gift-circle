@@ -1,3 +1,4 @@
+import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
@@ -21,11 +22,16 @@ export const Route = createFileRoute("/k/$slug_/share")({
       { title: "Share your kitty · Kitty" },
       { name: "description", content: "One link. Kitty handles the rest." },
       { name: "robots", content: "noindex" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Share your kitty" },
       { property: "og:description", content: "One link. Kitty handles the rest." },
     ],
   }),
   component: SharePage,
+  pendingComponent: PotSkeleton,
+  errorComponent: PotErrorPage,
+  notFoundComponent: () => <NotFoundPage />,
 });
 
 function SharePage() {
@@ -99,6 +105,7 @@ function SharePage() {
                 try { await setReminders({ data: { slug, adminToken: t, enabled: v } }); } catch { setRem(!v); toast.error("Couldn't save that. Try again."); }
               }}
               aria-label="Reminders"
+              className="relative before:absolute before:-inset-x-1 before:-inset-y-3 before:content-['']"
             />
           </label>
         </section>

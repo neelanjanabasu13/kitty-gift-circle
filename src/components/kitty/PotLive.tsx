@@ -1,3 +1,4 @@
+import { KittyMascot } from "./KittyMascot";
 import { DemoTag } from "./Logo";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict, format } from "date-fns";
@@ -55,7 +56,14 @@ export function PicksGrid({ view, compact = false }: { view: PotView; compact?: 
   if (!picks.length) {
     return (
       <>
-        <p className="mb-4 text-[15px] text-muted-foreground">Kitty starts picking gifts as the pot grows.</p>
+        <p className="mb-4 flex items-center gap-3 text-[15px] text-muted-foreground">
+          <KittyMascot state="idle" size={56} />
+          {!view.config.shop
+            ? "Gift search switches on once the shop key is added."
+            : view.raised < 30
+              ? `No picks yet. I start looking once the pot reaches ${formatMoney(30, view.pot.currency)}.`
+              : "I'm looking for gifts now. Picks land here in a moment."}
+        </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <PickSkeleton />
           <PickSkeleton />

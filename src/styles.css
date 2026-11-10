@@ -31,6 +31,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-held: var(--held);
   --color-held-soft: var(--held-soft);
+  --color-held-ink: var(--held-ink);
   --color-paid: var(--paid);
   --color-paid-soft: var(--paid-soft);
   --color-released: var(--released);
@@ -89,13 +90,14 @@
 
   /* Kraft gift box and ribbon */
   --kraft: #C9A27E;
-  --kraft-deep: #A9825F;
+  --kraft-deep: #7D5A38; /* text on paper: 5.8:1, AA */
   --kraft-soft: #F3EDE4;
   --ribbon: #E5484D;
 
   /* Money states */
   --held: #0070E0;
   --held-soft: #E8F1FC;
+  --held-ink: #0057B8; /* held pill text: 6:1 on held-soft */
   --paid: #0A7D4F;
   --paid-soft: #E6F4EC;
   --released: #6E6862;
@@ -178,7 +180,7 @@
   100% { background-position: 200% 0; }
 }
 @utility shimmer {
-  background-image: linear-gradient(90deg, var(--color-muted) 0%, var(--color-card) 50%, var(--color-muted) 100%);
+  background-image: linear-gradient(90deg, var(--color-kraft-soft) 0%, var(--color-card) 50%, var(--color-kraft-soft) 100%);
   background-size: 200% 100%;
   animation: kitty-shimmer 1.8s ease-in-out infinite;
 }

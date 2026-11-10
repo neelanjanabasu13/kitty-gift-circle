@@ -1,3 +1,4 @@
+import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute } from "@tanstack/react-router";
 import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
@@ -22,6 +23,9 @@ export const Route = createFileRoute("/k/$slug_/card")({
     };
   },
   component: CardPage,
+  pendingComponent: PotSkeleton,
+  errorComponent: PotErrorPage,
+  notFoundComponent: () => <NotFoundPage />,
 });
 
 function CardPage() {

@@ -10,6 +10,8 @@ export const Route = createFileRoute("/preview")({
       { title: "Screens preview · Kitty" },
       { name: "description", content: "Preview of Kitty's vote, veto, receipt and cancelled screens." },
       { name: "robots", content: "noindex" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Screens preview · Kitty" },
       { property: "og:description", content: "Preview of Kitty's later screens." },
     ],

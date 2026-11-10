@@ -19,6 +19,8 @@ export const Route = createFileRoute("/start")({
     meta: [
       { title: "Start a kitty · Kitty" },
       { name: "description", content: "Answer a few quick questions and Kitty does the collecting, choosing and buying." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Start a kitty" },
       { property: "og:description", content: "Set up a group gift in a minute. Nobody's charged unless the gift happens." },
     ],
@@ -298,7 +300,7 @@ function StartPage() {
           <AnimatePresence mode="wait">
             <motion.div key={step} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {step === "name" && (
-                <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Their first name" maxLength={60} className="h-12 rounded-[12px] text-[16px]" autoComplete="off" />
+                <Input autoFocus aria-label="Their first name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Their first name" maxLength={60} className="h-12 rounded-[12px] text-[16px]" autoComplete="off" />
               )}
               {step === "occasion" && <Chips options={OCCASIONS} value={occasion} onPick={(v) => { setOccasion(v); setIdx((i) => i + 1); }} />}
               {step === "closeness" && <Chips options={CLOSENESS} value={closeness} onPick={(v) => { setCloseness(v); setIdx((i) => i + 1); }} />}

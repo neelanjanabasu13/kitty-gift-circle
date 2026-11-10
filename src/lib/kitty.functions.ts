@@ -293,6 +293,8 @@ async function loadPot(slug: string, adminToken?: string) {
     vote,
     receipt,
     reminder: isAdmin ? await latestReminder(pot.id) : null,
+    // Which services are switched on (booleans only, never values), so screens can explain calmly.
+    config: { paypal: !!process.env["PAYPAL_CLIENT_ID"] && !!process.env["PAYPAL_CLIENT_SECRET"], shop: !!process.env["CHANNEL3_API_KEY"] },
     split,
     wishlistImageUrl,
     raised,
@@ -482,7 +484,27 @@ export const healthCheck = createServerFn({ method: "POST" }).handler(async () =
     token: { ok: boolean; error?: string };
     order: { ok: boolean; id?: string; status?: string; error?: string };
     database: { ok: boolean; error?: string };
-  } = { secrets, currency: DEFAULT_CURRENCY, token: { ok: false }, order: { ok: false }, database: { ok: false } };
+    shop: { ok: boolean; offers?: number; products?: number; error?: string };
+    ai: { ok: boolean; error?: string };
+  } = { secrets, currency: DEFAULT_CURRENCY, token: { ok: false }, order: { ok: false }, database: { ok: false }, shop: { ok: false }, ai: { ok: false } };
+
+  // Channel3 test search (GB): count in-stock GBP offers from UK retailers.
+  const { searchProducts } = await import("./channel3.server");
+  const sr = await searchProducts({ query: "ceramic coffee mug", potId: "health-check", minPrice: 5, maxPrice: 80, limit: 10 });
+  if (sr.status === "ok") {
+    const offers = sr.products.flatMap((p) => p.offers).filter((o) => o.inStock && o.currency === "GBP" && /\.uk$/i.test(o.domain));
+    result.shop = { ok: true, products: sr.products.length, offers: offers.length };
+  } else result.shop = { ok: false, error: sr.status === "not_configured" ? "key missing" : sr.message };
+
+  // Lovable AI check: one tiny completion.
+  try {
+    const { generateChatCompletion } = await import("@lovable.dev/ai-gateway");
+    const r = await generateChatCompletion({ model: "google/gemini-3.1-flash-lite", messages: [{ role: "user", content: "Reply with the single word: ok" }] });
+    const c = (r as any)?.choices?.[0]?.message?.content;
+    result.ai = c ? { ok: true } : { ok: false, error: "empty reply" };
+  } catch (e) {
+    result.ai = { ok: false, error: e instanceof Error ? e.message.slice(0, 80) : "unreachable" };
+  }
 
   try {
     const db = await admin();

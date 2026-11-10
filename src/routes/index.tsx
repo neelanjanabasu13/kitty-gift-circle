@@ -17,6 +17,8 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: "Kitty: the group gift that buys itself" },
       { name: "description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Kitty: the group gift that buys itself" },
       { property: "og:description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
     ],

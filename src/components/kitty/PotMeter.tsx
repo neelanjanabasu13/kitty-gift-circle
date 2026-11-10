@@ -18,9 +18,9 @@ export function PotMeter({ raised, target, currency, people, size = "lg", footer
   return (
     <div className="space-y-3">
       <div className="flex items-end justify-between gap-3">
-        <p className="flex items-baseline gap-2">
+        <p className="flex min-h-[56px] items-baseline gap-2" aria-live="polite" aria-atomic="true">
           <span className={size === "lg" ? "font-display text-[56px] leading-[0.9] tracking-[-0.03em]" : "font-display text-[40px] leading-[0.9] tracking-[-0.03em]"}>
-            <CountUp value={raised} currency={currency} />
+            <span className="sr-only">{formatMoney(raised, currency)} raised</span><span aria-hidden="true"><CountUp value={raised} currency={currency} /></span>
           </span>
           <span className="text-[15px] text-muted-foreground tabular">of {formatMoney(target, currency)}</span>
         </p>

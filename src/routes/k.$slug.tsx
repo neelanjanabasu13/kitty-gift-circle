@@ -1,3 +1,4 @@
+import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
@@ -32,12 +33,17 @@ export const Route = createFileRoute("/k/$slug")({
       meta: [
         { title },
         { name: "description", content: desc },
-        { property: "og:title", content: title },
+        { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+      { property: "og:title", content: title },
         { property: "og:description", content: desc },
       ],
     };
   },
   component: ContributorPage,
+  pendingComponent: PotSkeleton,
+  errorComponent: PotErrorPage,
+  notFoundComponent: () => <NotFoundPage />,
 });
 
 type Mine = { contributionId: string; orderId: string; authorizationId?: string | null; amount: number; withdrawn?: boolean; voted?: boolean };
@@ -99,7 +105,7 @@ function ContributorPage() {
             {closed ? (
               <p className="border-t pt-6 text-[15px] text-muted-foreground">This kitty has stopped taking contributions.</p>
             ) : (
-              <ChipInForm slug={slug} name={pot.recipient_name} currency={pot.currency} target={pot.target_amount} expected={pot.expected_count} likes={pot.likes} onDone={(m) => saveMine(m)} />
+              <ChipInForm slug={slug} name={pot.recipient_name} currency={pot.currency} target={pot.target_amount} expected={pot.expected_count} likes={pot.likes} paypalReady={data.config.paypal} onDone={(m) => saveMine(m)} />
             )}
           </div>
         )}
@@ -115,7 +121,7 @@ function ContributorPage() {
   );
 }
 
-function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: { slug: string; name: string; currency: string; target: number; expected: number; likes: string[]; onDone: (m: Mine) => void }) {
+function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady, onDone }: { slug: string; name: string; currency: string; target: number; expected: number; likes: string[]; paypalReady: boolean; onDone: (m: Mine) => void }) {
   const chips = amountChips(target, expected);
   const suggested = suggestedAmount(target, expected);
   const [amount, setAmount] = useState<number>(suggested);
@@ -174,6 +180,17 @@ function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: {
         {message && <p className="mt-1 text-right text-[12px] text-muted-foreground tabular">{message.length}/280</p>}
       </section>
 
+      {!paypalReady ? (
+      <section className="border-t pt-8">
+        <div className="flex items-center gap-4 rounded-[14px] bg-kraft-soft p-5" role="status">
+          <KittyMascot state="idle" size={64} />
+          <div>
+            <h2 className="text-[24px]">Payments switch on soon.</h2>
+            <p className="mt-1 text-[15px] text-muted-foreground">Nothing can be charged yet. Come back to this link a little later to chip in.</p>
+          </div>
+        </div>
+      </section>
+      ) : (
       <section className="space-y-4 border-t pt-8">
         <div>
           <p className="flex items-center gap-2 text-[22px] font-medium"><span className="tabular">Hold {label} with PayPal</span></p>
@@ -225,6 +242,7 @@ function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: {
           />
         )}
       </section>
+      )}
     </div>
   );
 }

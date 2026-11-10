@@ -1,3 +1,4 @@
+import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
@@ -25,6 +26,9 @@ export const Route = createFileRoute("/k/$slug_/receipt")({
     };
   },
   component: ReceiptPage,
+  pendingComponent: PotSkeleton,
+  errorComponent: PotErrorPage,
+  notFoundComponent: () => <NotFoundPage />,
 });
 
 function ReceiptPage() {

@@ -8,7 +8,7 @@ export function PickCard({ pick, currency }: { pick: Pick; currency: string }) {
   return (
     <motion.article layout transition={{ type: "spring", stiffness: 380, damping: 34 }} className="overflow-hidden rounded-[14px] border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="relative aspect-[4/3] bg-muted">
-        {pick.image_url ? <img src={pick.image_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="h-full w-full shimmer" />}
+        {pick.image_url ? <img src={pick.image_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" width={400} height={300} referrerPolicy="no-referrer" /> : <div className="h-full w-full shimmer" />}
         {pick.rank != null && <span className="absolute top-3 left-3 grid size-7 place-items-center rounded-full bg-card text-[12px] font-medium tabular">{pick.rank}</span>}
       </div>
       <div className="space-y-1.5 p-4">

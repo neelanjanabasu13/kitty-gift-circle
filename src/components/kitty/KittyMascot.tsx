@@ -1,5 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { lazy, Suspense } from "react";
+const Confetti = lazy(() => import("./MascotConfetti"));
 
 // Kitty: a simple geometric cat living in a kraft gift box with a red ribbon. Inline SVG, motion/react only.
 
@@ -201,16 +203,8 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
             <circle cx={100} cy={112} r={5} fill={RIBBON} stroke={INK} strokeWidth={2} />
           </motion.g>
 
-          {/* Confetti */}
-          {s === "done" && !reduce && Array.from({ length: 12 }).map((_, i) => {
-            const a = (i / 12) * Math.PI * 2;
-            return (
-              <motion.rect key={i} x={98} y={100} width={5} height={8} rx={1} fill={i % 2 ? RIBBON : KRAFT}
-                initial={{ x: 0, y: 0, opacity: 0, rotate: 0 }}
-                animate={{ x: Math.cos(a) * 70, y: Math.sin(a) * 50 - 30, opacity: [0, 1, 0], rotate: 180 }}
-                transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 1.6, ease: "easeOut" }} />
-            );
-          })}
+          {/* Confetti: only the done state needs it, so it loads on demand. */}
+          {s === "done" && !reduce && <Suspense fallback={null}><Confetti ribbon={RIBBON} kraft={KRAFT} /></Suspense>}
         </motion.svg>
       </AnimatePresence>
     </span>

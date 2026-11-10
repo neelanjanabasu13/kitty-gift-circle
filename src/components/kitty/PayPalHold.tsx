@@ -91,16 +91,16 @@ export function PayPalHold({
   return (
     <div className="relative">
       {state === "loading" && (
-        <div className="space-y-2" aria-label="Loading PayPal">
+        <div className="space-y-2" aria-busy="true" aria-label="Loading PayPal">
           <div className="h-12 rounded-full shimmer" />
           <div className="h-12 rounded-full shimmer" />
         </div>
       )}
       {state === "unconfigured" && (
-        <p className="rounded-2xl bg-held-soft p-4 text-sm text-foreground">PayPal isn't connected yet, so holds are paused for now. Please check back soon.</p>
+        <p className="rounded-[14px] bg-kraft-soft p-4 text-[15px]" role="status">Payments switch on soon. Nothing can be charged yet.</p>
       )}
       {state === "error" && (
-        <p className="rounded-2xl bg-held-soft p-4 text-sm text-foreground">PayPal didn't load. Check your connection and refresh the page.</p>
+        <div className="space-y-3 rounded-[14px] bg-kraft-soft p-4 text-[15px]" role="alert"><p>PayPal didn't load. Nothing was held. Check your connection and try again.</p><button type="button" onClick={() => window.location.reload()} className="inline-flex min-h-11 items-center rounded-[12px] border bg-card px-4 text-[14px]">Try again</button></div>
       )}
       <div ref={ref} className={disabled ? "pointer-events-none opacity-40 transition-opacity" : "transition-opacity"} />
     </div>

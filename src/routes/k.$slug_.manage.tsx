@@ -1,3 +1,4 @@
+import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { FastForward, MoreHorizontal, RotateCcw, Sprout } from "lucide-react";
@@ -11,6 +12,7 @@ import { PotLive } from "@/components/kitty/PotLive";
 import { Cancelled } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { cancelPot, resetDemoPot, runKittyNow, seedDemoPot, setDemoSpeed } from "@/lib/kitty.functions";
+import { CommissionNote } from "@/components/kitty/PickCard";
 import { ReminderCard } from "@/components/kitty/ReminderCard";
 import { EditProfile } from "@/components/kitty/EditProfile";
 import { ClosingStage, useTick } from "@/components/kitty/Closing";
@@ -25,11 +27,16 @@ export const Route = createFileRoute("/k/$slug_/manage")({
       { title: "Manage your kitty · Kitty" },
       { name: "description", content: "Watch the pot fill, read the card and see what Kitty is doing." },
       { name: "robots", content: "noindex" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Manage your kitty" },
       { property: "og:description", content: "Watch the pot fill and see what Kitty is doing." },
     ],
   }),
   component: ManagePage,
+  pendingComponent: PotSkeleton,
+  errorComponent: PotErrorPage,
+  notFoundComponent: () => <NotFoundPage />,
 });
 
 function ManagePage() {
@@ -135,6 +142,7 @@ function ManagePage() {
               <Button asChild variant="quiet" size="xl"><Link to="/k/$slug/receipt" params={{ slug }}>Receipt</Link></Button>
               <Button asChild variant="quiet" size="xl"><Link to="/k/$slug/card" params={{ slug }}>The card</Link></Button>
             </div>
+            <CommissionNote />
           </section>
         )}
         {data.reminder && pot.reminders_enabled && pot.status === "collecting" && <ReminderCard reminder={data.reminder} slug={slug} adminToken={t} onDone={() => void refetch()} />}

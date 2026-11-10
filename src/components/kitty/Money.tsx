@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 export type MoneyState = "held" | "paid" | "released";
 
 const styles: Record<MoneyState, string> = {
-  held: "bg-held-soft text-held",
+  held: "bg-held-soft text-held-ink",
   paid: "bg-paid-soft text-paid",
   released: "bg-released-soft text-released",
 };
