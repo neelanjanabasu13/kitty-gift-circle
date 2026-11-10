@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
-import { Check, HeartHandshake, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Sparkles } from "lucide-react";
+import { KittyMascot } from "./KittyMascot";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/kitty";
 import { MoneyPill } from "./Money";
@@ -58,32 +59,26 @@ function fmtLeft(s: number) {
   return h ? `${h}:${m}:${ss}` : `${m}:${ss}`;
 }
 
-export function VetoCountdown({ title, price, currency, at, why, secondsLeft, totalSeconds, organiser, contributorLine, busy = false }: {
+export function VetoCountdown({ title, price, currency, at, why, secondsLeft, totalSeconds, organiser, contributorLine, busy = false, children }: {
   title: string; price: number; currency: string; at: string; why: string | null; secondsLeft: number; totalSeconds: number;
   organiser?: { onSwap: () => void; onVeto: () => void; onBuyNow: () => void; canSwap: boolean } | undefined;
-  contributorLine?: string; busy?: boolean;
+  contributorLine?: string; busy?: boolean; children?: React.ReactNode;
 }) {
   const r = 54;
   const c = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, secondsLeft / Math.max(1, totalSeconds)));
   return (
     <section className="space-y-8 text-center">
+      <KittyMascot state="veto" size={160} className="mx-auto" />
       <h2 className="mx-auto max-w-xl text-[40px] md:text-[52px]">Buying the {title} for <span className="tabular">{formatMoney(price, currency)}</span> at {at} <em>unless you veto.</em></h2>
       <div className="relative mx-auto size-40" role="timer" aria-label={`${fmtLeft(secondsLeft)} left`}>
         <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden="true">
-          <defs>
-            <linearGradient id="ember-ring" x1="0" x2="1">
-              <stop offset="0%" stopColor="var(--ember-1)" />
-              <stop offset="50%" stopColor="var(--ember-2)" />
-              <stop offset="100%" stopColor="var(--ember-3)" />
-            </linearGradient>
-          </defs>
           <circle cx="60" cy="60" r={r} fill="none" stroke="var(--color-muted)" strokeWidth="6" />
-          <circle cx="60" cy="60" r={r} fill="none" stroke="url(#ember-ring)" strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: "stroke-dashoffset 1s linear" }} />
+          <circle cx="60" cy="60" r={r} fill="none" stroke="var(--ribbon)" strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: "stroke-dashoffset 1s linear" }} />
         </svg>
-        <span className="absolute inset-0 grid place-items-center font-mono text-[28px] tabular">{fmtLeft(secondsLeft)}</span>
+        <span className="absolute inset-0 grid place-items-center font-display text-[40px] tabular">{fmtLeft(secondsLeft)}</span>
       </div>
-      {why && <p className="mx-auto flex max-w-md justify-center gap-1.5 font-display text-[20px] italic"><Sparkles className="mt-1.5 size-4 shrink-0 text-ember-2" />{why}</p>}
+      {why && <p className="mx-auto flex max-w-md justify-center gap-1.5 font-display text-[20px] italic"><Sparkles className="mt-1.5 size-4 shrink-0 text-ribbon" />{why}</p>}
       {organiser ? (
         <>
           <div className="mx-auto grid max-w-sm grid-cols-2 gap-2">
@@ -95,19 +90,89 @@ export function VetoCountdown({ title, price, currency, at, why, secondsLeft, to
       ) : (
         contributorLine && <p className="flex items-center justify-center gap-2 text-[15px] text-muted-foreground"><MoneyPill state="held" />{contributorLine}</p>
       )}
+      {children && <div className="mx-auto max-w-md text-left">{children}</div>}
     </section>
   );
 }
 
-export type ReceiptPayment = { key: string; name: string | null; amount: number | null; captureId: string | null };
+export type SplitRow = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null };
 
-export function Receipt({ recipient, item, retailer, currency, price, held, released, payments, payoutId, payoutLine, buyUrl, notes }: {
+/** One clear line per person under the surplus rule. The viewer's own row is highlighted. */
+export function SplitList({ rows, currency, mineId, mine, future = false }: { rows: SplitRow[]; currency: string; mineId?: string | null | undefined; mine?: { held: number; paid: number | null } | null | undefined; future?: boolean }) {
+  const m = (n: number) => formatMoney(n, currency, { exact: !Number.isInteger(n) });
+  return (
+    <ul className="divide-y">
+      {rows.map((r) => {
+        const isMe = !!mineId && r.id === mineId;
+        let held = r.held, paid = r.paid, released = r.released;
+        if (isMe && held == null && mine) { held = mine.held; paid = mine.paid; released = mine.paid != null ? Math.round((mine.held - mine.paid) * 100) / 100 : null; }
+        const who = isMe ? "You" : r.name ?? "Someone";
+        return (
+          <li key={r.id} className={`flex min-h-12 items-center gap-3 py-2.5 text-[15px] ${isMe ? "-mx-3 rounded-[12px] bg-kraft-soft px-3" : ""}`}>
+            <span className="min-w-0 flex-1">
+              {held == null || paid == null ? (
+                <>{who} chipped in. {isMe ? "Your" : "Their"} share stays private.</>
+              ) : (
+                <>
+                  {who} held <span className="tabular">{m(held)}</span>. {future ? "Pays" : "Paid"} <span className="font-medium tabular">{m(paid)}</span>.{" "}
+                  {released! > 0 ? <><span className="tabular">{m(released!)}</span> released back{isMe ? " to you" : ""}.</> : "Nothing to release."}
+                </>
+              )}
+            </span>
+            <MoneyPill state={future ? "held" : (paid ?? 1) > 0 ? "paid" : "released"} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function HowWeSplit({ price, pot, currency }: { price: number; pot: number; currency: string }) {
+  const pct = pot > 0 ? Math.round((price / pot) * 1000) / 10 : 100;
+  const same = Math.round(price * 100) >= Math.round(pot * 100);
+  return (
+    <details className="group rounded-[12px] border bg-card px-4 py-3 text-[14px]">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between font-medium">
+        How we split it <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+      </summary>
+      <p className="mt-2 text-muted-foreground">
+        {same
+          ? `The gift cost ${formatMoney(price, currency)}, exactly what the pot reached, so everyone pays what they put in.`
+          : `The gift cost ${formatMoney(price, currency)} and the pot reached ${formatMoney(pot, currency)}. Everyone pays the same share of what they put in, about ${pct}%. The rest of each hold is released and never charged.`}
+      </p>
+    </details>
+  );
+}
+
+/** Expandable PayPal references. The only place mono type is used. */
+export function PayPalDetails({ rows }: { rows: { label: string; value: string | null | undefined }[] }) {
+  const shown = rows.filter((r) => r.value);
+  if (!shown.length) return null;
+  return (
+    <details className="group w-full rounded-[12px] border bg-card px-4 py-3 text-left text-[13px]">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between font-medium">
+        Details <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+      </summary>
+      <dl className="mt-2 space-y-1.5">
+        {shown.map((r) => (
+          <div key={r.label + r.value} className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground">{r.label}</dt>
+            <dd className="truncate font-mono text-[12px]">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
+export function Receipt({ recipient, item, retailer, currency, price, held, released, split, mineId, mine, details, payoutLine, buyUrl, notes }: {
   recipient: string; item: string; retailer: string | null; currency: string; price: number; held: number; released: number;
-  payments: ReceiptPayment[]; payoutId: string | null; payoutLine?: string | null; buyUrl?: string | null; notes: { key: string; name: string; message: string }[];
+  split: SplitRow[]; mineId?: string | null | undefined; mine?: { held: number; paid: number | null } | null | undefined;
+  details: { label: string; value: string | null | undefined }[]; payoutLine?: string | null | undefined; buyUrl?: string | null | undefined; notes: { key: string; name: string; message: string }[];
 }) {
   return (
     <section className="space-y-8">
-      <div className="surface mx-auto max-w-md p-6">
+      <div className="surface mx-auto max-w-md space-y-5 p-6">
         <div className="flex items-center justify-between border-b pb-4">
           <span className="font-display text-[26px]">Receipt</span>
           <MoneyPill state="paid" />
@@ -116,27 +181,19 @@ export function Receipt({ recipient, item, retailer, currency, price, held, rele
           <Row k="Gift" v={item} />
           {retailer && <Row k="Shop" v={retailer} />}
           <Row k="For" v={recipient} />
-          <Row k="Price" v={<span className="tabular">{formatMoney(price, currency, { exact: true })}</span>} />
-          <Row k="Pot total" v={<span className="tabular">{formatMoney(held, currency, { exact: true })}</span>} />
-          {payments.map((c) => (
-            <Row
-              key={c.key}
-              k={c.name ?? "Anonymous"}
-              v={
-                <span className="flex flex-col items-end gap-1">
-                  <span className="flex items-center gap-2 tabular">{c.amount != null ? formatMoney(c.amount, currency, { exact: true }) : <span className="text-muted-foreground">amount hidden</span>}<MoneyPill state="paid" /></span>
-                  {c.captureId && <span className="font-mono text-[11px] text-muted-foreground">{c.captureId}</span>}
-                </span>
-              }
-            />
-          ))}
-          <Row k="Released" v={<span className="flex items-center gap-2 tabular">{formatMoney(released, currency, { exact: !Number.isInteger(released) })}<MoneyPill state="released" /></span>} />
-          <Row k="Total paid" v={<span className="text-[16px] font-semibold tabular">{formatMoney(price, currency, { exact: true })}</span>} />
-          <Row k="Payout" v={payoutId ? <span className="font-mono text-[12px]">{payoutId}</span> : <span className="text-muted-foreground">Held by Kitty</span>} />
+          <Row k="Pot total" v={<span className="flex items-center gap-2 tabular">{formatMoney(held, currency, { exact: true })}<MoneyPill state="held" /></span>} />
+          <Row k="Gift price" v={<span className="flex items-center gap-2 text-[16px] font-semibold tabular">{formatMoney(price, currency, { exact: true })}<MoneyPill state="paid" /></span>} />
+          <Row k="Released back" v={<span className="flex items-center gap-2 tabular">{formatMoney(released, currency, { exact: !Number.isInteger(released) })}<MoneyPill state="released" /></span>} />
         </dl>
-        {payoutLine && <p className="mt-4 border-t pt-4 text-[13px] text-muted-foreground">{payoutLine}</p>}
+        <div>
+          <p className="mb-1 text-[13px] text-muted-foreground">Who paid what</p>
+          <SplitList rows={split} currency={currency} mineId={mineId} mine={mine} />
+        </div>
+        <HowWeSplit price={price} pot={held} currency={currency} />
+        {payoutLine && <p className="text-[13px] text-muted-foreground">{payoutLine}</p>}
+        <PayPalDetails rows={details} />
         {buyUrl && (
-          <Button asChild variant="quiet" size="xl" className="mt-4 w-full">
+          <Button asChild variant="quiet" size="xl" className="w-full">
             <a href={buyUrl} target="_blank" rel="noreferrer sponsored">View the gift{retailer ? ` at ${retailer}` : ""}</a>
           </Button>
         )}
@@ -171,7 +228,7 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 export function Cancelled() {
   return (
     <section className="mx-auto max-w-lg space-y-4 py-10 text-center">
-      <HeartHandshake className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
+      <KittyMascot state="cancelled" size={200} className="mx-auto" />
       <h1 className="text-[44px] md:text-[56px]">Kitty's off.</h1>
       <p className="text-[16px] text-muted-foreground">Every hold was released and nobody was charged.</p>
       <MoneyPill state="released" />

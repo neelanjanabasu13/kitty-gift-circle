@@ -60,7 +60,7 @@ function SharePage() {
 
         <section className="space-y-3">
           <div className="flex items-center gap-2 rounded-[14px] border bg-card p-2 pl-5 shadow-bar">
-            <span className="min-w-0 flex-1 truncate font-mono text-[15px] md:text-[17px]">{link.replace(/^https?:\/\//, "")}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-medium md:text-[17px]">{link.replace(/^https?:\/\//, "")}</span>
             <Button variant="ink" size="xl" onClick={async () => { await copy(link, "Link copied"); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
               {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
             </Button>

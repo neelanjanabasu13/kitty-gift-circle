@@ -24,7 +24,7 @@ function Row({ label, ok, detail }: { label: string; ok: boolean; detail?: strin
     <li className="flex min-h-14 items-center gap-3 py-3">
       <span className={`size-2 shrink-0 rounded-full ${ok ? "bg-paid" : "bg-destructive"}`} aria-hidden="true" />
       <span className="flex-1 text-[15px]">{label}</span>
-      <span className="max-w-[55%] truncate text-right font-mono text-[12px] text-muted-foreground">{ok ? "ok" : "not ok"}{detail ? ` · ${detail}` : ""}</span>
+      <span className="max-w-[55%] truncate text-right text-[13px] text-muted-foreground">{ok ? "ok" : "not ok"}{detail ? ` · ${detail}` : ""}</span>
     </li>
   );
 }

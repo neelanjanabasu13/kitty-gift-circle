@@ -205,7 +205,7 @@ function StartPage() {
   return (
     <div className="flex min-h-[100dvh] flex-col">
       <div className="fixed inset-x-0 top-0 z-20 h-0.5 bg-transparent">
-        <motion.div className="h-full bg-ember" animate={{ width: `${progress}%` }} />
+        <motion.div className="h-full bg-kraft" animate={{ width: `${progress}%` }} />
       </div>
       <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-3">
         <Logo />
@@ -233,7 +233,7 @@ function StartPage() {
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="pt-10">
             {done.length > 0 && reaction(done[done.length - 1]!) && (
-              <p className="mb-3 flex items-center gap-2 font-mono text-[12.5px] text-muted-foreground"><KittyMark className="size-3.5" />{reaction(done[done.length - 1]!)}</p>
+              <p className="mb-3 flex items-center gap-2 text-[14px] text-muted-foreground"><KittyMark className="size-3.5" />{reaction(done[done.length - 1]!)}</p>
             )}
             <div className="flex items-start gap-3">
               <span className="mt-2 hidden text-foreground sm:block"><KittyMark className="size-6" live /></span>

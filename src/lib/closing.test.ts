@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterCapture, excessRefunds, holdAction, isVoteClosed, pickWinner, proRata, releasedAmount, shouldClose, voteClosesAt } from "./closing";
+import { afterCapture, proportionalRefund, splitLines, splitPence, holdAction, isVoteClosed, pickWinner, proRata, releasedAmount, shouldClose, voteClosesAt } from "./closing";
 
 const sum = (xs: { share: number }[]) => Math.round(xs.reduce((s, x) => s + x.share * 100, 0)) / 100;
 
@@ -11,12 +11,23 @@ describe("pro-rata capture", () => {
     expect(sum(r)).toBe(118);
     r.forEach((x, i) => expect(x.share).toBeLessThanOrEqual(amounts[i]!));
   });
-  it("leftover pennies land on the largest contribution", () => {
-    const r = proRata([{ id: "a", amount: 10 }, { id: "b", amount: 10 }, { id: "c", amount: 13 }], 10);
-    expect(sum(r)).toBe(10);
-    expect(r.find((x) => x.id === "c")!.share).toBe(3.94);
+  it("uneven amounts: whoever put in more gets more back", () => {
+    const r = splitLines([{ id: "a", amount: 20 }, { id: "b", amount: 5 }], 20);
+    expect(r).toEqual([{ id: "a", held: 20, paid: 16, released: 4 }, { id: "b", held: 5, paid: 4, released: 1 }]);
   });
-  it("full pot captures every hold in full", () => {
+  it("leftover pennies go to the largest fractional remainders", () => {
+    // 1000/3300, 1000/3300, 1300/3300 of 1000p: exact 303.03, 303.03, 393.94 -> floors 303, 303, 393, 1p left
+    // remainders 0.03, 0.03, 0.94 so the penny goes to c
+    expect(splitPence([1000, 1000, 1300], 1000)).toEqual([303, 303, 394]);
+    // three equal holds splitting 100p: remainders tie, ties go to input order
+    expect(splitPence([500, 500, 500], 100)).toEqual([34, 33, 33]);
+    // the larger fractional remainder gets the penny
+    expect(splitPence([300, 600], 100)).toEqual([33, 67]);
+  });
+  it("a single contributor pays exactly the price", () => {
+    expect(splitLines([{ id: "a", amount: 122 }], 118)).toEqual([{ id: "a", held: 122, paid: 118, released: 4 }]);
+  });
+  it("exact match: pot equals price, everyone pays in full", () => {
     expect(proRata([{ id: "a", amount: 7.5 }, { id: "b", amount: 2.5 }], 10).map((x) => x.share)).toEqual([7.5, 2.5]);
   });
   it("refuses a gift above the pot", () => {
@@ -61,8 +72,10 @@ describe("closing and failures", () => {
     expect(afterCapture(100, 118, picks)).toEqual({ kind: "swap", to: picks[0] });
     expect(afterCapture(40, 118, picks).kind).toBe("refund");
   });
-  it("excess refunds come from the largest captures", () => {
-    expect(excessRefunds([{ id: "a", amount: 30 }, { id: "b", amount: 70 }], 95)).toEqual([{ id: "b", amount: 5 }]);
+  it("a refund after capture is split in the same proportions", () => {
+    const r = proportionalRefund([{ id: "a", amount: 15.73 }, { id: "b", amount: 7.87 }, { id: "c", amount: 3.94 }], 3);
+    expect(Math.round(r.reduce((s, x) => s + x.amount * 100, 0))).toBe(300);
+    expect(r).toEqual([{ id: "a", amount: 1.71 }, { id: "b", amount: 0.86 }, { id: "c", amount: 0.43 }]);
   });
   it("holds past the honour period are reauthorised, dead ones dropped", () => {
     const now = new Date("2026-01-05T00:00:00Z");

@@ -13,7 +13,8 @@ import { CommissionNote } from "@/components/kitty/PickCard";
 import { PayPalHold } from "@/components/kitty/PayPalHold";
 import { AgentTicker } from "@/components/kitty/AgentFeed";
 import { MoneyPill } from "@/components/kitty/Money";
-import { Cancelled, SuccessTick } from "@/components/kitty/Stages";
+import { Cancelled, PayPalDetails } from "@/components/kitty/Stages";
+import { KittyMascot } from "@/components/kitty/KittyMascot";
 import { ClosingStage, useTick } from "@/components/kitty/Closing";
 import { Link } from "@tanstack/react-router";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
@@ -187,7 +188,7 @@ function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: {
         {finishing ? (
           <div className="space-y-2" aria-label="Placing your hold">
             <div className="h-12 rounded-[12px] shimmer" />
-            <p className="text-center font-mono text-[12.5px] text-muted-foreground">Placing your hold with PayPal...</p>
+            <p className="text-center text-[14px] text-muted-foreground">Placing your hold with PayPal...</p>
           </div>
         ) : (
           <PayPalHold
@@ -230,20 +231,22 @@ function ChipInForm({ slug, name, currency, target, expected, likes, onDone }: {
 
 function Success({ mine, currency, canWithdraw, onWithdrawn, name }: { mine: Mine; currency: string; canWithdraw: boolean; onWithdrawn: () => void; name: string }) {
   const [busy, setBusy] = useState(false);
+  const [winked, setWinked] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setWinked(true), 2400);
+    return () => clearTimeout(t);
+  }, []);
   const amt = formatMoney(mine.amount, currency);
   return (
     <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center gap-6 text-center">
-      <SuccessTick />
+      <KittyMascot state={winked ? "idle" : "chipIn"} wink={winked} fill={0.6} size={220} label="Kitty caught your coin" />
       <div className="space-y-3">
         <MoneyPill state="held" />
         <h1 className="text-[44px] md:text-[56px]"><span className="tabular">{amt}</span> held, <em>not charged.</em></h1>
         <p className="text-[16px] text-muted-foreground">If the gift for {name} falls through, the hold drops off.</p>
       </div>
-      <div className="space-y-1 font-mono text-[12px] text-muted-foreground">
-        <p>PayPal order <span className="text-foreground">{mine.orderId}</span></p>
-        {mine.authorizationId && <p>Authorisation <span className="text-foreground">{mine.authorizationId}</span></p>}
-      </div>
-      <AgentTicker text={mine.voted ? "Re-ranking with your vote..." : "Added to the pot. Watching for gifts..."} className="max-w-sm" />
+      <AgentTicker mascot="ranking" text={mine.voted ? "Thanks! I'm reshuffling the picks with your vote." : "You're in. I'm keeping an eye out for gifts."} className="max-w-sm" />
+      <div className="w-full max-w-sm"><PayPalDetails rows={[{ label: "PayPal order", value: mine.orderId }, { label: "Authorisation", value: mine.authorizationId }]} /></div>
       {canWithdraw && (
         <button
           type="button"

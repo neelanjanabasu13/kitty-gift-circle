@@ -4,6 +4,8 @@ import { Missing } from "@/components/kitty/Missing";
 import { Cancelled, Receipt } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { Button } from "@/components/ui/button";
+import { KittyMascot } from "@/components/kitty/KittyMascot";
+import { useMine } from "@/components/kitty/Closing";
 
 export const Route = createFileRoute("/k/$slug_/receipt")({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(potQuery(params.slug)),
@@ -28,6 +30,7 @@ export const Route = createFileRoute("/k/$slug_/receipt")({
 function ReceiptPage() {
   const { slug } = Route.useParams();
   const { data } = useLivePot(slug);
+  const { mine, mySplit } = useMine(slug);
   if (!data) return <Missing />;
   const { pot, receipt } = data;
   return (
@@ -44,6 +47,7 @@ function ReceiptPage() {
           </section>
         ) : (
           <>
+            <KittyMascot state="done" size={240} className="mx-auto block" />
             <h1 className="text-center text-[44px] md:text-[56px]">Done. {pot.recipient_name}'s gift is paid for, <em>and nobody fronted a penny.</em></h1>
             <Receipt
               recipient={pot.recipient_name}
@@ -53,9 +57,15 @@ function ReceiptPage() {
               price={receipt.paid || receipt.gift.price}
               held={receipt.held}
               released={receipt.released}
-              payments={receipt.payments.map((p) => ({ key: p.id, name: p.name, amount: p.amount, captureId: p.capture_id }))}
-              payoutId={receipt.payout?.status === "fallback" ? null : (receipt.payout?.batch_id ?? null)}
-              payoutLine={receipt.payout?.status === "fallback" ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.` : receipt.payout?.item_id ? `Payout item ${receipt.payout.item_id}, sent to ${pot.organiser_name}.` : null}
+              split={data.split?.lines ?? []}
+              mineId={mine?.contributionId}
+              mine={mySplit}
+              details={[
+                ...receipt.payments.map((p) => ({ label: `Capture${p.name ? `, ${p.name}` : ""}`, value: p.capture_id })),
+                { label: "Payout batch", value: receipt.payout?.status === "fallback" ? null : receipt.payout?.batch_id },
+                { label: "Payout item", value: receipt.payout?.item_id },
+              ]}
+              payoutLine={receipt.payout?.status === "fallback" ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.` : `Paid out to ${pot.organiser_name} through PayPal.`}
               buyUrl={receipt.gift.offer_url}
               notes={[]}
             />

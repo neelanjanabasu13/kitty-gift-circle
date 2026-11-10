@@ -27,7 +27,7 @@ export function PotMeter({ raised, target, currency, people, size = "lg", footer
         <MoneyPill state="held" className="mb-1" />
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Pot progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <motion.div className="h-full rounded-full bg-ember" initial={{ width: 0 }} animate={{ width: `${Math.max(pct, raised > 0 ? 3 : 0)}%` }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
+        <motion.div className="h-full rounded-full bg-kraft" initial={{ width: 0 }} animate={{ width: `${Math.max(pct, raised > 0 ? 3 : 0)}%` }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[13px] text-muted-foreground">
         <span className="tabular">{people === 0 ? "Nobody's chipped in yet" : `from ${people} ${people === 1 ? "person" : "people"}`}</span>

@@ -5,28 +5,54 @@ const cents = (n: number) => Math.round(n * 100);
 export type Hold = { id: string; amount: number };
 
 /**
- * Pro-rata capture so the captured total equals the gift price exactly.
- * Each share is floored to the penny of amount * price / pot; leftover pennies go to the largest
- * contribution first (never beyond what that person held), then the next largest.
+ * Largest-remainder split of `total` pence across integer pence `weights`.
+ * Floor every exact share, then hand leftover pennies one by one to the largest fractional
+ * remainders (ties to the larger weight, then input order), so shares sum exactly to `total`.
+ */
+export function splitPence(weights: number[], total: number): number[] {
+  const sum = weights.reduce((s, w) => s + w, 0);
+  if (total <= 0 || sum <= 0) return weights.map(() => 0);
+  if (total > sum) throw new Error("Can't split more than the pot holds.");
+  const rows = weights.map((w, i) => ({ i, w, floor: Math.floor((w * total) / sum), rem: (w * total) % sum }));
+  let left = total - rows.reduce((s, r) => s + r.floor, 0);
+  const order = [...rows].sort((x, y) => y.rem - x.rem || y.w - x.w || x.i - y.i);
+  for (const r of order) {
+    if (left <= 0) break;
+    r.floor += 1;
+    left -= 1;
+  }
+  return rows.map((r) => r.floor);
+}
+
+/**
+ * The surplus rule. Each hold captures amount x (price / pot) with largest-remainder pennies, so
+ * captures sum exactly to the price and the rest of each hold is released in proportion.
  */
 export function proRata(holds: Hold[], price: number): { id: string; share: number }[] {
   const pot = holds.reduce((s, h) => s + cents(h.amount), 0);
   const p = cents(price);
-  if (p <= 0) return holds.map((h) => ({ id: h.id, share: 0 }));
   if (p > pot) throw new Error("The gift costs more than the pot holds.");
-  const rows = holds.map((h) => {
-    const a = cents(h.amount);
-    return { id: h.id, a, s: Math.floor((a * p) / pot) };
+  const shares = splitPence(holds.map((h) => cents(h.amount)), p);
+  return holds.map((h, i) => ({ id: h.id, share: shares[i]! / 100 }));
+}
+
+/** Per-person view of the surplus rule: held, paid, released. */
+export function splitLines(holds: Hold[], price: number) {
+  return proRata(holds, price).map((s, i) => {
+    const held = holds[i]!.amount;
+    return { id: s.id, held, paid: s.share, released: (cents(held) - cents(s.share)) / 100 };
   });
-  let left = p - rows.reduce((s, r) => s + r.s, 0);
-  const order = [...rows].sort((x, y) => y.a - x.a);
-  for (const r of order) {
-    if (left <= 0) break;
-    const add = Math.min(left, r.a - r.s);
-    r.s += add;
-    left -= add;
-  }
-  return rows.map((r) => ({ id: r.id, share: r.s / 100 }));
+}
+
+/** Share of each hold that gets paid, as a percentage (e.g. 96.7). */
+export function paidPercent(price: number, pot: number) {
+  return pot > 0 ? Math.round((price / pot) * 1000) / 10 : 0;
+}
+
+/** Refund `amount` across captures in the same proportions, largest-remainder pennies. */
+export function proportionalRefund(captures: { id: string; amount: number }[], amount: number) {
+  const r = splitPence(captures.map((c) => cents(c.amount)), cents(amount));
+  return captures.map((c, i) => ({ id: c.id, amount: r[i]! / 100 })).filter((x) => x.amount > 0);
 }
 
 /** Money released back to people: everything held minus the gift price. */
@@ -85,19 +111,6 @@ export function afterCapture<T extends { id: string; price: number }>(captured: 
   if (cents(captured) >= cents(price)) return { kind: "proceed" };
   const to = fallbacks.find((f) => cents(f.price) <= cents(captured));
   return to ? { kind: "swap", to } : { kind: "refund" };
-}
-
-/** Refund the excess over `target` from the largest captures first. */
-export function excessRefunds(captures: { id: string; amount: number }[], target: number) {
-  let excess = captures.reduce((s, c) => s + cents(c.amount), 0) - cents(target);
-  const out: { id: string; amount: number }[] = [];
-  for (const c of [...captures].sort((a, b) => b.amount - a.amount)) {
-    if (excess <= 0) break;
-    const take = Math.min(excess, cents(c.amount));
-    out.push({ id: c.id, amount: take / 100 });
-    excess -= take;
-  }
-  return out;
 }
 
 /** A hold past its 3-day honour period but within 29 days can be reauthorised. */

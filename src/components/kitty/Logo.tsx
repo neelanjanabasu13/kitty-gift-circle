@@ -2,19 +2,21 @@ import { Link } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 
 export function KittyMark({ className = "size-7", live = false }: { className?: string; live?: boolean }) {
-  // Coin jar with cat ears, drawn in currentColor
+  // Static mark: Kitty's head peeking over a kraft box with a red ribbon.
   return (
     <span className="relative inline-flex">
       <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-        <path d="M9 13 L12 4 L18 10 Z M31 13 L28 4 L22 10 Z" fill="currentColor" />
-        <rect x="7" y="10" width="26" height="26" rx="9" fill="currentColor" />
-        <rect x="15" y="15.5" width="10" height="2.4" rx="1.2" fill="var(--color-background)" />
-        <circle cx="20" cy="26" r="3.2" fill="var(--color-background)" />
+        <path d="M11 17 L12.5 5 L19 12 Z M29 17 L27.5 5 L21 12 Z" fill="var(--color-card)" stroke="var(--color-foreground)" strokeWidth="1.8" strokeLinejoin="round" />
+        <ellipse cx="20" cy="18" rx="10" ry="8.5" fill="var(--color-card)" stroke="var(--color-foreground)" strokeWidth="1.8" />
+        <ellipse cx="16" cy="18" rx="2" ry="2.4" fill="var(--color-foreground)" />
+        <ellipse cx="24" cy="18" rx="2" ry="2.4" fill="var(--color-foreground)" />
+        <rect x="5" y="22" width="30" height="15" rx="2.5" fill="var(--color-kraft)" stroke="var(--color-foreground)" strokeWidth="1.8" />
+        <rect x="18" y="22" width="4" height="15" fill="var(--color-ribbon)" />
       </svg>
       {live && (
-        <span className="absolute -right-0.5 -bottom-0.5 size-2.5">
-          <span className="absolute inset-0 rounded-full bg-ember breathe" />
-          <span className="absolute inset-0 rounded-full bg-ember" />
+        <span className="absolute -right-0.5 -bottom-0.5 size-2">
+          <span className="absolute inset-0 rounded-full bg-ribbon breathe" />
+          <span className="absolute inset-0 rounded-full bg-ribbon" />
         </span>
       )}
     </span>

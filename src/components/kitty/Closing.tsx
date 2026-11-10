@@ -5,11 +5,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PotView } from "@/lib/kitty.functions";
-import { castFinalVote, extendDeadline, getMyVote, organiserDecide, tickPot } from "@/lib/kitty.functions";
+import { castFinalVote, extendDeadline, getMySplit, getMyVote, organiserDecide, tickPot } from "@/lib/kitty.functions";
 import { formatMoney } from "@/lib/kitty";
 import { clockTime } from "@/lib/closing";
 import { AgentTicker } from "./AgentFeed";
-import { FinalVote, VetoCountdown } from "./Stages";
+import { FinalVote, HowWeSplit, SplitList, VetoCountdown } from "./Stages";
+import { KittyMascot } from "./KittyMascot";
 import { Chip } from "./Chip";
 
 const ACTIVE = ["collecting", "voting", "veto", "buying"];
@@ -67,6 +68,23 @@ function useSecondsLeft(at: string | null | undefined, fallback: number) {
 
 export type Mine = { contributionId: string; orderId: string; amount: number };
 
+/** The contributor's own hold from this device, plus their own numbers under the surplus rule. */
+export function useMine(slug: string) {
+  const [mine, setMine] = useState<Mine | null>(null);
+  const [mySplit, setMySplit] = useState<{ held: number; paid: number | null } | null>(null);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(`kitty:mine:${slug}`) || "null");
+      if (v && !v.withdrawn) setMine(v);
+    } catch { /* ignore */ }
+  }, [slug]);
+  useEffect(() => {
+    if (!mine) return;
+    getMySplit({ data: { contributionId: mine.contributionId, orderId: mine.orderId } }).then((r) => setMySplit({ held: r.held, paid: r.paid })).catch(() => {});
+  }, [mine]);
+  return { mine, mySplit };
+}
+
 /** The closing stages (vote, veto countdown, buying, done) for both contributors and the organiser. */
 export function ClosingStage({ view, mine, adminToken }: { view: PotView; mine?: Mine | null | undefined; adminToken?: string | undefined }) {
   const { pot } = view;
@@ -79,6 +97,7 @@ export function ClosingStage({ view, mine, adminToken }: { view: PotView; mine?:
   if (pot.status === "buying") {
     return (
       <section className="mx-auto max-w-lg space-y-4 py-6 text-center">
+        <KittyMascot state="buying" size={200} className="mx-auto block" />
         <h2 className="text-[40px]">Buying it <em>now.</em></h2>
         <AgentTicker text={pot.agent_working ?? "Checking the shop and every hold with PayPal..."} className="mx-auto max-w-sm" />
       </section>
@@ -87,6 +106,7 @@ export function ClosingStage({ view, mine, adminToken }: { view: PotView; mine?:
   if (pot.status === "done") {
     return (
       <section className="mx-auto max-w-lg space-y-4 py-6 text-center">
+        <KittyMascot state="done" size={200} className="mx-auto block" />
         <h2 className="text-[40px]">Done. <em>It's paid for.</em></h2>
         <Button asChild variant="ink" size="xl"><Link to="/k/$slug/receipt" params={{ slug: pot.slug }}>See the receipt</Link></Button>
       </section>
@@ -178,7 +198,15 @@ function VetoStage({ view, mine, adminToken }: { view: PotView; mine?: Mine | nu
         busy={busy}
         contributorLine={mine ? `Kitty buys at ${at}. Your ${formatMoney(mine.amount, view.pot.currency)} is still only held.` : `Kitty buys at ${at}. Every contribution is still only held.`}
         organiser={adminToken ? { canSwap: alternatives.length > 0, onSwap: () => setDialog("swap"), onVeto: () => setDialog("veto"), onBuyNow: () => act("buy_now") } : undefined}
-      />
+      >
+        {view.split && (
+          <div className="space-y-3">
+            <p className="text-[15px] font-medium">If it goes ahead</p>
+            <SplitList rows={view.split.lines} currency={view.pot.currency} mineId={mine?.contributionId} mine={mine ? { held: mine.amount, paid: null } : null} future />
+            <HowWeSplit price={view.split.price} pot={view.split.pot} currency={view.pot.currency} />
+          </div>
+        )}
+      </VetoCountdown>
       {adminToken && (
         <Dialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>
           <DialogContent className="rounded-[14px]">

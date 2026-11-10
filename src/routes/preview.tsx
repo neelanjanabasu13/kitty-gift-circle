@@ -27,7 +27,7 @@ function PreviewPage() {
     <div className="min-h-screen">
       <TopBar />
       <main className="mx-auto max-w-3xl space-y-24 px-5 py-12">
-        <p className="font-mono text-[12px] text-muted-foreground">Sample screens with example data</p>
+        <p className="text-[13px] text-muted-foreground">Sample screens with example data</p>
         <FinalVote
           name="Priya"
           currency="GBP"
@@ -41,8 +41,10 @@ function PreviewPage() {
         <VetoCountdown title="Le Creuset" price={118} currency="GBP" at="5pm" why="She cooks every Sunday and the group voted cooking first." secondsLeft={left} totalSeconds={30 * 60} contributorLine="Kitty buys at 5pm. Your £10 is still only held." />
         <Receipt
           recipient="Priya" item="Le Creuset round casserole, 22cm" retailer="John Lewis" currency="GBP" price={118} held={122} released={4}
-          payoutId="PB-7K2LMN4QZ9"
-          payments={[{ key: "1", name: "Sam", amount: 14.51, captureId: "3C512345AB678901X" }, { key: "2", name: "Jo", amount: 14.51, captureId: "8H012345CD678901Y" }, { key: "3", name: null, amount: 11.61, captureId: "1J912345EF678901Z" }]}
+          split={[{ id: "1", name: "Sam", held: 20, paid: 19.34, released: 0.66 }, { id: "2", name: "Jo", held: 15, paid: 14.51, released: 0.49 }, { id: "3", name: null, held: 12, paid: 11.61, released: 0.39 }]}
+          mineId="2"
+          details={[{ label: "Capture, Sam", value: "3C512345AB678901X" }, { label: "Payout batch", value: "PB-7K2LMN4QZ9" }]}
+          payoutLine="Paid out to Sam through PayPal."
           notes={[{ key: "a", name: "Sam", message: "Go and cook something brilliant. We'll miss you." }, { key: "b", name: "Jo", message: "Sunday lunches will never be the same." }]}
         />
         <Cancelled />

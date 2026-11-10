@@ -91,12 +91,12 @@ export const createPot = createServerFn({ method: "POST" })
       console.error(error);
       throw new Error("We couldn't start the kitty just now. Please try again.");
     }
-    await logEvent(pot.id, "pot_created", `${data.organiser_name} started the kitty for ${data.recipient_name}.`, {
+    await logEvent(pot.id, "pot_created", `${data.organiser_name} just set up a kitty for ${data.recipient_name}. I'm on it.`, {
       likes: data.likes,
       mode: data.mode,
     });
     if (data.likes.length) {
-      await logEvent(pot.id, "profile_learned", `Kitty noted ${data.recipient_name} likes ${data.likes.slice(0, 3).join(", ")}${data.dislikes.length ? ` and will steer clear of ${data.dislikes.slice(0, 2).join(", ")}` : ""}.`);
+      await logEvent(pot.id, "profile_learned", `Noted: ${data.recipient_name} loves ${data.likes.slice(0, 3).join(", ")}.${data.dislikes.length ? ` I'll steer clear of ${data.dislikes.slice(0, 2).join(" and ")}.` : ""}`);
     }
     return { slug: pot.slug, adminToken: pot.admin_token };
   });
@@ -154,6 +154,25 @@ async function loadPot(slug: string, adminToken?: string) {
     const c = dec.candidate_id ? candById.get(dec.candidate_id) : undefined;
     decision = { id: dec.id, buy_at: dec.buy_at, why: dec.why, decided_by: dec.decided_by, total_seconds: dec.total_seconds, pick: c ? { id: c.id, title: c.title, price: Number(c.price), retailer: c.retailer, offer_url: c.offer_url, image_url: c.image_url } : null };
   }
+  type SplitLine = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null };
+  let split: null | { price: number; pot: number; lines: SplitLine[] } = null;
+  if (["veto", "buying"].includes(pot.status) && decision?.pick) {
+    const { splitLines } = await import("./closing");
+    const holds = live.filter((c) => c.status === "authorized" || c.status === "reauthorized");
+    const tot = holds.reduce((x, c) => x + Number(c.amount), 0);
+    if (tot >= decision.pick.price) {
+      const lines = splitLines(holds.map((h) => ({ id: h.id, amount: Number(h.amount) })), decision.pick.price);
+      split = {
+        price: decision.pick.price,
+        pot: Math.round(tot * 100) / 100,
+        lines: lines.map((l) => {
+          const c = holds.find((h) => h.id === l.id)!;
+          const hide = c.visibility === "amount_hidden" && !isAdmin;
+          return { id: l.id, name: c.visibility === "anonymous" && !isAdmin ? null : c.display_name || null, held: hide ? null : l.held, paid: hide ? null : l.paid, released: hide ? null : l.released };
+        }),
+      };
+    }
+  }
   const vs = pot.status === "voting" ? await voteState(pot) : null;
   const vote = vs
     ? { closesAt: pot.vote_closes_at as string | null, eligible: vs.eligible, voted: vs.voted, picks: vs.ids.map((id) => candById.get(id)).filter(Boolean).map((c) => ({ id: c!.id, title: c!.title, price: Number(c!.price), retailer: c!.retailer, image_url: c!.image_url, total_score: c!.total_score != null ? Number(c!.total_score) : null, votes: vs.tally[c!.id] ?? 0 })) }
@@ -173,6 +192,15 @@ async function loadPot(slug: string, adminToken?: string) {
     const rows = paidRows ?? [];
     const held = rows.reduce((s, r) => s + Number(r.amount), 0);
     const paid = rows.filter((r) => r.status === "captured").reduce((s, r) => s + Number(r.captured_amount ?? 0), 0);
+    split = {
+      price: Math.round(paid * 100) / 100,
+      pot: Math.round(held * 100) / 100,
+      lines: rows.map((r) => {
+        const hide = r.visibility === "amount_hidden" && !isAdmin;
+        const p = r.status === "captured" ? Number(r.captured_amount ?? 0) : 0;
+        return { id: r.id, name: r.visibility === "anonymous" && !isAdmin ? null : r.display_name || null, held: hide ? null : Number(r.amount), paid: hide ? null : p, released: hide ? null : Math.round((Number(r.amount) - p) * 100) / 100 };
+      }),
+    };
     receipt = {
       gift: decision?.pick ? { title: decision.pick.title, retailer: decision.pick.retailer, price: decision.pick.price, offer_url: po?.buy_url ?? decision.pick.offer_url, image_url: decision.pick.image_url } : null,
       held: Math.round(held * 100) / 100,
@@ -218,6 +246,7 @@ async function loadPot(slug: string, adminToken?: string) {
     decision,
     vote,
     receipt,
+    split,
     wishlistImageUrl,
     raised,
     people: live.length,
@@ -320,9 +349,9 @@ export const authorizeContribution = createServerFn({ method: "POST" })
       const raised = (live ?? []).reduce((s, x) => s + Number(x.amount), 0);
       const who = c.visibility === "anonymous" ? "Someone" : c.display_name || "Someone";
       const amt = c.visibility === "amount_hidden" ? "a hold" : `a ${pot?.currency === "USD" ? "$" : "£"}${Number(c.amount)} hold`;
-      await logEvent(c.pot_id, "contribution_held", `${who} chipped in with ${amt}. Held, not charged.`);
+      await logEvent(c.pot_id, "contribution_held", `${who} just chipped in${c.visibility === "amount_hidden" ? "" : ` ${amt.replace(/^a /, "").replace(/ hold$/, "")}`}. That gets us to ${pot?.currency === "USD" ? "$" : "£"}${Math.round(raised * 100) / 100}. Held, not charged.`);
       if (pot && raised >= Number(pot.target_amount)) {
-        await logEvent(c.pot_id, "target_reached", "The pot has hit its target. Kitty will start lining up gifts.");
+        await logEvent(c.pot_id, "target_reached", "We've hit the target! I'll start lining up the final picks.");
       }
       return { ok: true, amount: Number(c.amount), contributionId: c.id, authorizationId: r.authorizationId as string | null };
     } catch (e) {
@@ -355,7 +384,7 @@ export const withdrawContribution = createServerFn({ method: "POST" })
     }
     await db.from("contributions").update({ status: "voided" }).eq("id", c.id);
     const who = c.visibility === "anonymous" ? "Someone" : c.display_name || "Someone";
-    await logEvent(c.pot_id, "contribution_withdrawn", `${who} withdrew their hold. It's been released and nothing was charged.`);
+    await logEvent(c.pot_id, "contribution_withdrawn", `${who} stepped out. Their hold's been released and nothing was charged.`);
     return { ok: true };
   });
 
@@ -449,7 +478,7 @@ export const runKittyNow = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100) }).parse(d))
   .handler(async ({ data }) => {
     const pot = await requireAdmin(data.slug, data.adminToken);
-    await logEvent(pot.id, "manual_run", "Organiser asked me to take another look.");
+    await logEvent(pot.id, "manual_run", "Taking another look, as asked.");
     const { runAgent } = await agent();
     const r = await runAgent(pot.id, { kind: "manual" });
     const { tickPot: tick } = await closing();
@@ -471,7 +500,7 @@ export const updatePotProfile = createServerFn({ method: "POST" })
     const pot = await requireAdmin(data.slug, data.adminToken);
     const db = await admin();
     await db.from("pots").update({ likes: data.likes, dislikes: data.dislikes, wishlist_url: data.wishlist_url || null }).eq("id", pot.id);
-    await logEvent(pot.id, "profile_updated", `Got it. Updated what ${pot.recipient_name} is into. Re-planning from scratch.`);
+    await logEvent(pot.id, "profile_updated", `Got it, I've updated what ${pot.recipient_name} is into. Starting the search again from scratch.`);
     const { runAgent } = await agent();
     return runAgent(pot.id, { kind: "replan" });
   });
@@ -547,7 +576,7 @@ export const organiserDecide = createServerFn({ method: "POST" })
     const dec = await c.currentDecision(pot!.id);
     if (data.action === "buy_now") {
       if (dec) await db.from("decisions").update({ buy_at: new Date().toISOString() }).eq("id", dec.id);
-      await logEvent(pot!.id, "buy_now", `${pot!.organiser_name} said buy it now.`);
+      await logEvent(pot!.id, "buy_now", `${pot!.organiser_name} said go for it. Buying now.`);
       await c.tickPot(pot!.id);
       return { released: 0, failed: 0 };
     }
@@ -556,7 +585,7 @@ export const organiserDecide = createServerFn({ method: "POST" })
     const { data: live } = await db.from("contributions").select("amount").eq("pot_id", pot!.id).in("status", ["authorized", "reauthorized"]);
     const total = (live ?? []).reduce((s, x) => s + Number(x.amount), 0);
     if (!pick || Number(pick.price) > total) throw new Error("The pot doesn't cover that gift.");
-    await logEvent(pot!.id, "swapped", `${pot!.organiser_name} swapped to ${pick.title.slice(0, 60)}. Countdown restarted.`);
+    await logEvent(pot!.id, "swapped", `${pot!.organiser_name} swapped to the ${pick.title.slice(0, 60)}. I've restarted the countdown.`);
     await c.startVeto(pot, pick, "organiser", undefined, { from: dec });
     return { released: 0, failed: 0 };
   });
@@ -578,4 +607,21 @@ export const extendDeadline = createServerFn({ method: "POST" })
     await db.from("pots").update({ status: "collecting", deadline_at: deadline, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null }).eq("id", pot!.id);
     await logEvent(pot!.id, "extended", `Deadline pushed back ${data.days === 1 ? "a day" : "3 days"}. Kitty's collecting again, and every hold is still only held.`);
     return { deadline };
+  });
+
+/** A contributor's own numbers under the surplus rule, even when their amount is hidden from others. */
+export const getMySplit = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ contributionId: z.string().uuid(), orderId: z.string().min(5).max(60) }).parse(d))
+  .handler(async ({ data }) => {
+    const c = await ownContribution(data.contributionId, data.orderId);
+    const db = await admin();
+    const { data: me } = await db.from("contributions").select("amount, captured_amount, status, paypal_order_id, authorization_id, capture_id").eq("id", c.id).single();
+    return {
+      held: Number(me?.amount ?? 0),
+      paid: me?.captured_amount != null ? Number(me.captured_amount) : null,
+      status: me?.status ?? c.status,
+      orderId: me?.paypal_order_id ?? null,
+      authorizationId: me?.authorization_id ?? null,
+      captureId: me?.capture_id ?? null,
+    };
   });

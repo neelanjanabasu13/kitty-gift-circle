@@ -5,6 +5,7 @@ import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PayPalWordmark, TopBar } from "@/components/kitty/Logo";
 import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
+import { KittyMascot, type MascotState } from "@/components/kitty/KittyMascot";
 import { PotMeter } from "@/components/kitty/PotMeter";
 import { PickCard } from "@/components/kitty/PickCard";
 import casserole from "@/assets/pick-casserole.jpg";
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/")({
 function Landing() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const step = useDemoStep();
   const go = (e: React.FormEvent) => {
     e.preventDefault();
     navigate({ to: "/start", search: { name: name.trim() || undefined } });
@@ -36,7 +38,8 @@ function Landing() {
       <TopBar right={<Button asChild variant="ink" size="tap"><Link to="/start" search={{ name: undefined }}>Start a kitty</Link></Button>} />
 
       <main>
-        <section className="mx-auto max-w-3xl px-5 pt-16 pb-14 text-center md:pt-28">
+        <section className="mx-auto max-w-3xl px-5 pt-8 pb-14 text-center md:pt-14">
+          <KittyMascot state={SCRIPT[step]!.mascot} fill={SCRIPT[step]!.raised / 120} size={240} className="mx-auto mb-4 block" />
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-[44px] md:text-[72px]">
             The group gift that <em>buys itself</em>.
           </motion.h1>
@@ -52,7 +55,7 @@ function Landing() {
           </motion.form>
         </section>
 
-        <LiveDemo />
+        <LiveDemo step={step} />
 
         <section className="mx-auto max-w-5xl px-5 py-20">
           <ol className="grid gap-8 border-t pt-10 md:grid-cols-3">
@@ -62,7 +65,7 @@ function Landing() {
               ["Kitty buys it.", "It finds real gifts that fit the person and the pot, then buys the best one."],
             ].map(([t, b], i) => (
               <li key={t}>
-                <p className="font-mono text-[12px] text-muted-foreground">0{i + 1}</p>
+                <p className="text-[13px] font-medium text-kraft-deep tabular">0{i + 1}</p>
                 <p className="mt-2 font-display text-[28px] leading-tight">{t}</p>
                 <p className="mt-2 text-[15px] text-muted-foreground">{b}</p>
               </li>
@@ -92,30 +95,35 @@ const PICKS = [
   { id: "b", title: "Hand-thrown pour-over coffee set", retailer: "Etsy", category: "Ceramics", price: 64, image_url: pourover, reason: "Coffee and pottery, both on her list." },
   { id: "c", title: "Pasta-making class for two", retailer: "Obby", category: "Experiences", price: 95, image_url: pasta, reason: "An evening out that still feels like cooking." },
 ];
-const SCRIPT: { raised: number; people: number; line: string; order: string[]; working: string }[] = [
-  { raised: 72, people: 6, line: "Priya's pot opened by Sam. Kitty noted: cooking, ceramics, coffee.", order: ["b", "c", "a"], working: "Searching 5 shops for cooking gifts under £72..." },
-  { raised: 87, people: 7, line: "Jo chipped in £15. Held, not charged.", order: ["b", "c", "a"], working: "Checking stock and delivery for 9 candidates..." },
-  { raised: 97, people: 8, line: "Someone chipped in £10. 2 more votes for cooking.", order: ["c", "b", "a"], working: "Re-ranking with the group's votes..." },
-  { raised: 112, people: 9, line: "Ravi chipped in £15. The casserole is nearly in reach.", order: ["c", "a", "b"], working: "Searching 5 shops for cooking gifts under £112..." },
-  { raised: 120, people: 10, line: "Target reached. Le Creuset casserole moves to the top.", order: ["a", "c", "b"], working: "Lining up the final vote..." },
+const SCRIPT: { raised: number; people: number; line: string; kind: string; order: string[]; working: string; mascot: MascotState }[] = [
+  { raised: 72, people: 6, kind: "pot_created", mascot: "idle", line: "Sam set up a kitty for Priya. Noted: she loves cooking, ceramics and coffee.", order: ["b", "c", "a"], working: "Settling in" },
+  { raised: 87, people: 7, kind: "contribution_held", mascot: "chipIn", line: "Jo just chipped in £15. That gets us to £87.", order: ["b", "c", "a"], working: "Counting it in" },
+  { raised: 97, people: 8, kind: "searched", mascot: "searching", line: "I looked through 5 shops for cooking gifts under £97.", order: ["c", "b", "a"], working: "Looking through shops for cooking gifts" },
+  { raised: 112, people: 9, kind: "reranked", mascot: "ranking", line: "Ravi chipped in, so I reshuffled. The casserole is nearly in reach.", order: ["c", "a", "b"], working: "Weighing up 9 gifts for Priya" },
+  { raised: 120, people: 10, kind: "captured", mascot: "buying", line: "We hit £120! Buying the Le Creuset casserole now.", order: ["a", "c", "b"], working: "Wrapping it up" },
+  { raised: 120, people: 10, kind: "paid_out", mascot: "done", line: "All done. Priya's gift is paid for, and nobody fronted a penny.", order: ["a", "c", "b"], working: "" },
 ];
 
-function LiveDemo() {
+function useDemoStep() {
   const reduce = useReducedMotion();
-  const [step, setStep] = useState(reduce ? SCRIPT.length - 1 : 0);
+  const [step, setStep] = useState(0);
   useEffect(() => {
     if (reduce) return;
     const t = setInterval(() => setStep((s) => (s + 1) % SCRIPT.length), 2800);
     return () => clearInterval(t);
   }, [reduce]);
+  return step;
+}
+
+function LiveDemo({ step }: { step: number }) {
   const cur = SCRIPT[step]!;
   const now = Date.now();
-  const lines: AgentLine[] = SCRIPT.slice(0, step + 1).reverse().map((s, i) => ({ id: s.line, at: new Date(now - (i * 47 + 3) * 1000).toISOString(), message: s.line }));
+  const lines: AgentLine[] = SCRIPT.slice(0, step + 1).reverse().map((s, i) => ({ id: s.line, kind: s.kind, at: new Date(now - (i * 47 + 3) * 1000).toISOString(), message: s.line }));
   const picks = cur.order.map((id, i) => ({ ...PICKS.find((p) => p.id === id)!, rank: i + 1 }));
 
   return (
     <section aria-label="Kitty in action" className="mx-auto grid max-w-6xl gap-6 px-5 md:px-8 lg:grid-cols-2 lg:gap-10">
-      <AgentFeed lines={lines.slice(0, 5)} working={cur.working} className="lg:order-1" />
+      <AgentFeed lines={lines.slice(0, 5)} working={cur.working || undefined} mascot={cur.mascot} fill={cur.raised / 120} className="lg:order-1" />
       <div className="surface space-y-6 p-5 md:p-6 lg:order-2">
         <div>
           <p className="text-[13px] text-muted-foreground">Chipping in for</p>

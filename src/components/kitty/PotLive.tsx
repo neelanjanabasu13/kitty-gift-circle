@@ -8,6 +8,7 @@ import { MoneyPill } from "./Money";
 import { CommissionNote, PickCard, PickSkeleton } from "./PickCard";
 import { LayoutGroup } from "motion/react";
 import { nextUnlock } from "@/lib/scoring";
+import { mascotStateFor } from "./KittyMascot";
 
 export function Deadline({ at }: { at: string }) {
   const d = new Date(at);
@@ -19,24 +20,28 @@ export function Deadline({ at }: { at: string }) {
   );
 }
 
-/** Builds the agent's current status and the honest 'up next' list from what we know today. */
+/** Kitty's in-flight line (only while something is actually happening) and the honest 'next up' list. */
 export function agentNarration(view: PotView) {
   const { pot, raised, candidates } = view;
+  const working = pot.agent_working ?? (pot.agent_busy ? "Having a think" : undefined);
   if (pot.status === "cancelled" || pot.status === "done") return { working: undefined, upNext: [] as string[] };
-  if (pot.status === "voting") return { working: pot.agent_working ?? "Counting votes as they come in...", upNext: ["Start the veto countdown with the winner"] };
-  if (pot.status === "veto") return { working: pot.agent_working ?? "Counting down. Ready to buy if nobody vetoes.", upNext: ["Re-check the price and every hold", "Take each share and pay out"] };
-  if (pot.status === "buying") return { working: pot.agent_working ?? "Buying the gift...", upNext: ["Send the receipt"] };
+  if (pot.status === "voting") return { working, upNext: ["Once the vote closes, I'll start a short countdown before buying"] };
+  if (pot.status === "veto") return { working, upNext: ["Check the price and every hold one last time", "Take each person's share and release the rest"] };
+  if (pot.status === "buying") return { working: working ?? "Buying the gift", upNext: ["Send everyone the receipt"] };
   const topic = pot.likes[0] ?? "thoughtful";
   const ranked = candidates.some((c) => c.rank != null);
-  let working: string | undefined;
-  if (pot.agent_working) working = pot.agent_working;
-  else if (pot.agent_busy) working = "Thinking...";
-  else if (view.people === 0) working = "Waiting for the first chip-in...";
-  else working = ranked ? `Watching the pot at ${formatMoney(raised, pot.currency)}. Ready to re-rank.` : `Watching the pot at ${formatMoney(raised, pot.currency)}. Lining up ${topic} gifts...`;
-  const upNext = ranked
-    ? [pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote"]
-    : [`Search shops for ${topic} gifts under ${formatMoney(Math.max(raised, 30), pot.currency)}`, "Rank picks against what the group voted for", pot.vote_window === "off" ? "Choose the best fit and start the veto countdown" : "Open the final vote"];
+  const vote = pot.vote_window === "off" ? "Pick the best fit and start a short countdown" : "Open the final vote";
+  const upNext = view.people === 0
+    ? ["Wait for the first chip-in", `Look for ${topic} gifts as the pot grows`]
+    : ranked
+      ? [`Keep an eye on the pot at ${formatMoney(raised, pot.currency)}`, vote]
+      : [`Look for ${topic} gifts under ${formatMoney(Math.max(raised, 30), pot.currency)}`, "Weigh them up against the group's votes", vote];
   return { working, upNext };
+}
+
+export function potMascot(view: PotView) {
+  const latest = view.events[0];
+  return mascotStateFor({ status: view.pot.status, working: view.pot.agent_working, busy: view.pot.agent_busy, latestKind: latest?.kind ?? null, latestAt: latest?.at ?? null });
 }
 
 export function topPicks(view: PotView) {
@@ -60,7 +65,7 @@ export function PicksGrid({ view, compact = false }: { view: PotView; compact?: 
   }
   return (
     <>
-      {note && <p className="mb-4 font-mono text-[12.5px] text-muted-foreground">{note.message}</p>}
+      {note && <p className="mb-4 text-[14px] text-muted-foreground">{note.message}</p>}
       <LayoutGroup>
         <div className={compact ? "grid grid-cols-1 gap-3 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-3"}>
           {picks.map((c) => (
@@ -90,7 +95,7 @@ export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?:
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-12">
       <div className="lg:sticky lg:top-6 lg:self-start">
-        <AgentFeed lines={events} working={working} upNext={upNext} />
+        <AgentFeed lines={events} working={working} upNext={upNext} mascot={potMascot(view)} fill={pot.target_amount ? raised / pot.target_amount : 0} />
       </div>
 
       <div className="space-y-10">

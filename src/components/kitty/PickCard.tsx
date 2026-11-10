@@ -9,7 +9,7 @@ export function PickCard({ pick, currency }: { pick: Pick; currency: string }) {
     <motion.article layout transition={{ type: "spring", stiffness: 380, damping: 34 }} className="overflow-hidden rounded-[14px] border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="relative aspect-[4/3] bg-muted">
         {pick.image_url ? <img src={pick.image_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="h-full w-full shimmer" />}
-        {pick.rank != null && <span className="absolute top-3 left-3 grid size-7 place-items-center rounded-full bg-card font-mono text-[12px] tabular">{pick.rank}</span>}
+        {pick.rank != null && <span className="absolute top-3 left-3 grid size-7 place-items-center rounded-full bg-card text-[12px] font-medium tabular">{pick.rank}</span>}
       </div>
       <div className="space-y-1.5 p-4">
         <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">{[pick.retailer, pick.category].filter(Boolean).join(" · ")}</p>
@@ -19,7 +19,7 @@ export function PickCard({ pick, currency }: { pick: Pick; currency: string }) {
         </div>
         {pick.reason && (
           <p className="flex gap-1.5 font-display text-[17px] leading-snug italic">
-            <Sparkles className="mt-1 size-3.5 shrink-0 text-ember-2" aria-hidden="true" />
+            <Sparkles className="mt-1 size-3.5 shrink-0 text-ribbon" aria-hidden="true" />
             {pick.reason}
           </p>
         )}
