@@ -60,6 +60,8 @@ async function runOnce(potId: string, trigger: Trigger) {
   const db = await admin();
   const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
   if (!pot || pot.status !== "collecting") return;
+  // Fixed split: the organiser already chose the gift, so there's nothing to search or rank.
+  if (pot.mode === "fixed_split") return;
 
   const { data: live } = await db.from("contributions").select("id, amount").eq("pot_id", potId).in("status", LIVE);
   const raised = (live ?? []).reduce((s, c) => s + Number(c.amount), 0);
@@ -215,7 +217,7 @@ const short = (t: string) => (t.length > 48 ? `${t.slice(0, 46).trim()}...` : t)
 export async function finalSearch(potId: string, raised: number) {
   const db = await admin();
   const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
-  if (!pot) return 0;
+  if (!pot || pot.mode === "fixed_split") return 0;
   const { data: live } = await db.from("contributions").select("id").eq("pot_id", potId).in("status", LIVE);
   const liveIds = new Set((live ?? []).map((c) => c.id));
   const { data: votes } = await db.from("category_votes").select("category, contribution_id").eq("pot_id", potId);
@@ -236,6 +238,7 @@ export async function finalSearch(potId: string, raised: number) {
 /** Re-rank cached candidates against a new total (after holds drop off). */
 export async function rerankAt(potId: string, raised: number) {
   const db = await admin();
-  const { data: pot } = await db.from("pots").select("currency").eq("id", potId).single();
+  const { data: pot } = await db.from("pots").select("currency, mode").eq("id", potId).single();
+  if (pot?.mode === "fixed_split") return;
   await rerank(potId, raised, {}, { kind: "withdrawn" }, pot?.currency ?? "GBP");
 }

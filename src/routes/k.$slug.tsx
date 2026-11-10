@@ -71,7 +71,7 @@ function ContributorPage() {
 
   return (
     <div className="min-h-screen">
-      <TopBar right={<span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"><Lock className="size-3.5" /> Hold only</span>} />
+      <TopBar demo={!!data?.pot.demo_speed} demoFactor={data?.pot.demo_factor} right={<span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"><Lock className="size-3.5" /> Hold only</span>} />
       <main className="mx-auto max-w-6xl px-5 pb-20 md:px-8">
         {pot.status === "cancelled" ? (
           <Cancelled />

@@ -1,3 +1,4 @@
+import { DemoTag } from "./Logo";
 import { motion } from "motion/react";
 import { Check, ChevronDown, Sparkles } from "lucide-react";
 import { KittyMascot } from "./KittyMascot";
@@ -95,7 +96,7 @@ export function VetoCountdown({ title, price, currency, at, why, secondsLeft, to
   );
 }
 
-export type SplitRow = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null };
+export type SplitRow = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null; demo?: boolean };
 
 /** One clear line per person under the surplus rule. The viewer's own row is highlighted. */
 export function SplitList({ rows, currency, mineId, mine, future = false }: { rows: SplitRow[]; currency: string; mineId?: string | null | undefined; mine?: { held: number; paid: number | null } | null | undefined; future?: boolean }) {
@@ -119,6 +120,7 @@ export function SplitList({ rows, currency, mineId, mine, future = false }: { ro
                 </>
               )}
             </span>
+            {r.demo && <DemoTag />}
             <MoneyPill state={future ? "held" : (paid ?? 1) > 0 ? "paid" : "released"} />
           </li>
         );

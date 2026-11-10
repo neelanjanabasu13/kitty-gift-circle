@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { FastForward, MoreHorizontal, RotateCcw, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -10,7 +10,8 @@ import { Missing } from "@/components/kitty/Missing";
 import { PotLive } from "@/components/kitty/PotLive";
 import { Cancelled } from "@/components/kitty/Stages";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
-import { cancelPot, runKittyNow } from "@/lib/kitty.functions";
+import { cancelPot, resetDemoPot, runKittyNow, seedDemoPot, setDemoSpeed } from "@/lib/kitty.functions";
+import { ReminderCard } from "@/components/kitty/ReminderCard";
 import { EditProfile } from "@/components/kitty/EditProfile";
 import { ClosingStage, useTick } from "@/components/kitty/Closing";
 import { formatMoney } from "@/lib/kitty";
@@ -40,6 +41,13 @@ function ManagePage() {
   const [confirm, setConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const demoAction = async (fn: () => Promise<unknown>, ok: string) => {
+    setDemoBusy(true);
+    try { await fn(); toast.success(ok); await refetch(); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "That didn't work. Try again."); }
+    finally { setDemoBusy(false); }
+  };
 
   useEffect(() => {
     if (!data?.isAdmin) return;
@@ -59,7 +67,7 @@ function ManagePage() {
 
   return (
     <div className="min-h-screen">
-      <TopBar
+      <TopBar demo={pot.demo_speed} demoFactor={pot.demo_factor}
         right={
           <div className="flex items-center gap-2">
             {!cancelled && <Button asChild variant="ink" size="tap"><Link to="/k/$slug/share" params={{ slug }} search={{ t }}>Share</Link></Button>}
@@ -70,6 +78,15 @@ function ManagePage() {
               <DropdownMenuContent align="end" className="w-52 rounded-[12px]">
                 <DropdownMenuItem disabled={!canCancel} onSelect={() => setEditing(true)}>Edit likes and wishlist</DropdownMenuItem>
                 <DropdownMenuItem asChild><Link to="/k/$slug" params={{ slug }}>View as a contributor</Link></DropdownMenuItem>
+                <DropdownMenuItem disabled={demoBusy || ["done", "cancelled"].includes(pot.status)} onSelect={() => demoAction(() => setDemoSpeed({ data: { slug, adminToken: t, enabled: !pot.demo_speed } }), pot.demo_speed ? "Demo speed is off." : "Demo speed is on.")}>
+                  <FastForward /> {pot.demo_speed ? "Turn off demo speed" : "Turn on demo speed"}
+                </DropdownMenuItem>
+                {pot.is_demo && (
+                  <>
+                    <DropdownMenuItem disabled={demoBusy} onSelect={() => demoAction(() => seedDemoPot({ data: { slug, adminToken: t } }), "Demo chip-ins are in.")}><Sprout /> Seed demo chip-ins</DropdownMenuItem>
+                    <DropdownMenuItem disabled={demoBusy} onSelect={() => demoAction(() => resetDemoPot({ data: { slug, adminToken: t } }), "Demo pot reset. Real holds were released.")}><RotateCcw /> Reset demo pot</DropdownMenuItem>
+                  </>
+                )}
                 {canCancel && (
                   <>
                     <DropdownMenuSeparator />
@@ -105,9 +122,11 @@ function ManagePage() {
         {cancelled && <Cancelled />}
         {pot.status === "done" && data.receipt?.gift && (
           <section className="mx-auto max-w-xl space-y-4 text-center">
-            <h2 className="text-[40px]">{data.receipt.payout?.status === "fallback" ? <>Paid for. <em>Ready to buy.</em></> : <><span className="tabular">{formatMoney(data.receipt.gift.price, pot.currency, { exact: true })}</span> is in <em>your PayPal.</em></>}</h2>
+            <h2 className="text-[40px]">{["fallback", "demo"].includes(data.receipt.payout?.status ?? "") ? <>Paid for. <em>Ready to buy.</em></> : <><span className="tabular">{formatMoney(data.receipt.gift.price, pot.currency, { exact: true })}</span> is in <em>your PayPal.</em></>}</h2>
             <p className="text-[15px] text-muted-foreground">
-              {data.receipt.payout?.status === "fallback"
+              {data.receipt.payout?.status === "demo"
+                ? "This is a demo pot, so no real money was paid out. Demo holds were never sent to PayPal."
+                : data.receipt.payout?.status === "fallback"
                 ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.`
                 : `Tap to buy it at ${data.receipt.gift.retailer ?? "the shop"}.`}
             </p>
@@ -118,6 +137,7 @@ function ManagePage() {
             </div>
           </section>
         )}
+        {data.reminder && pot.reminders_enabled && pot.status === "collecting" && <ReminderCard reminder={data.reminder} slug={slug} adminToken={t} onDone={() => void refetch()} />}
         {pot.status !== "done" && <ClosingStage view={data} adminToken={t} />}
         <PotLive view={data} />
 

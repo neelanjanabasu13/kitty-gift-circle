@@ -1,3 +1,4 @@
+import { DemoTag } from "./Logo";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict, format } from "date-fns";
 import type { PotView } from "@/lib/kitty.functions";
@@ -120,7 +121,10 @@ export function PotLive({ view, showMeter = true }: { view: PotView; showMeter?:
                 {contributors.map((c, i) => (
                   <motion.li key={c.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="flex min-h-14 items-center gap-3">
                     <span className={`grid size-9 shrink-0 place-items-center rounded-full border text-[12px] font-medium ${c.name ? "bg-card" : "bg-muted text-muted-foreground"}`}>{c.name ? initials(c.name) : "?"}</span>
-                    <span className="min-w-0 flex-1 truncate text-[15px]">{c.name ?? "Anonymous"}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5"><span className="truncate text-[15px]">{c.name ?? "Anonymous"}</span>{c.seeded && <DemoTag />}</span>
+                      {c.demoHold && <span className="block text-[12px] text-muted-foreground">demo hold, not a real PayPal hold</span>}
+                    </span>
                     <span className="text-[15px] tabular">{c.amount != null ? formatMoney(c.amount, pot.currency) : <span className="text-[13px] text-muted-foreground">amount hidden</span>}</span>
                     <MoneyPill state={c.status === "captured" ? "paid" : "held"} />
                   </motion.li>

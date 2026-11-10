@@ -9,7 +9,9 @@ import { Chip } from "@/components/kitty/Chip";
 import { KittyMark, Logo } from "@/components/kitty/Logo";
 import { CLOSENESS, DEFAULT_CURRENCY, INTERESTS, OCCASIONS, VOTE_WINDOWS, type Closeness, type Occasion, type VoteWindow } from "@/lib/config";
 import { formatMoney, suggestedAmount } from "@/lib/kitty";
-import { createPot } from "@/lib/kitty.functions";
+import { createPot, lookupProductUrl } from "@/lib/kitty.functions";
+import { Switch } from "@/components/ui/switch";
+import { KittyMascot } from "@/components/kitty/KittyMascot";
 
 export const Route = createFileRoute("/start")({
   validateSearch: (s: Record<string, unknown>) => ({ name: typeof s["name"] === "string" ? (s["name"] as string).slice(0, 60) : undefined }),
@@ -62,6 +64,10 @@ function StartPage() {
   const [orgName, setOrgName] = useState("");
   const [orgEmail, setOrgEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [demoSpeed, setDemoSpeed] = useState(false);
+  type Product = { title: string; image_url: string | null; retailer: string | null; price: number; offer_url: string; channel3_product_id: string | null };
+  const [product, setProduct] = useState<Product | null>(null);
+  const [lookup, setLookup] = useState<"idle" | "loading" | "ok" | "failed">("idle");
   const [idx, setIdx] = useState(search.name ? 1 : 0);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +77,23 @@ function StartPage() {
   const occLabel = OCCASIONS.find((o) => o.value === occasion)?.label;
   const closeLabel = CLOSENESS.find((o) => o.value === closeness)?.label;
   const dlLabel = DEADLINES.find((d) => d.key === deadlineKey)?.label ?? new Date(deadline).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+  // Fixed split: read the gift's price from the pasted link. Falls back to a price input.
+  useEffect(() => {
+    const url = productUrl.trim();
+    if (!knowsGift || !/^https?:\/\/\S+\.\S+/.test(url)) { setLookup("idle"); setProduct(null); return; }
+    let live = true;
+    setLookup("loading");
+    const h = setTimeout(async () => {
+      try {
+        const r = await lookupProductUrl({ data: { url } });
+        if (!live) return;
+        if (r.ok) { setProduct(r.product); setTarget(String(r.product.price)); setLookup("ok"); }
+        else { setProduct(null); setLookup("failed"); }
+      } catch { if (live) { setProduct(null); setLookup("failed"); } }
+    }, 500);
+    return () => { live = false; clearTimeout(h); };
+  }, [productUrl, knowsGift]);
 
   const steps: StepId[] = useMemo(() => {
     const all: StepId[] = ["name", "occasion", "closeness", "mode", "likes", "dislikes", "wishlist", "money", "deadline", "vote", "organiser", "review"];
@@ -83,7 +106,7 @@ function StartPage() {
     name: name.trim().length > 0,
     occasion: !!occasion,
     closeness: !!closeness,
-    mode: knowsGift === false || (knowsGift === true && /^https?:\/\/\S+\.\S+/.test(productUrl.trim())),
+    mode: knowsGift === false || (knowsGift === true && /^https?:\/\/\S+\.\S+/.test(productUrl.trim()) && lookup !== "loading"),
     likes: true,
     dislikes: true,
     wishlist: !wishlistUrl.trim() || /^https?:\/\/\S+\.\S+/.test(wishlistUrl.trim()),
@@ -114,6 +137,7 @@ function StartPage() {
     if (s === "mode" && knowsGift === false) return "Leave it with me. I'll find real gifts that fit.";
     if (s === "likes" && likes.length) return `${likes.slice(0, 2).map(cap).join(" and ")}. Good to know.`;
     if (s === "dislikes" && dislikes.length) return `Noted. I'll steer clear of ${dislikes.slice(0, 2).join(" and ")}.`;
+    if (s === "mode" && knowsGift && product) return `Got it: ${product.title.slice(0, 50)} for ${formatMoney(product.price, DEFAULT_CURRENCY, { exact: !Number.isInteger(product.price) })}.`;
     if (s === "money" && targetNum >= 1) return `About ${formatMoney(share, DEFAULT_CURRENCY)} each. Easy.`;
     return null;
   };
@@ -122,7 +146,7 @@ function StartPage() {
     name: name.trim(),
     occasion: occLabel ?? "",
     closeness: closeLabel ?? "",
-    mode: knowsGift ? "I've got a link" : "Kitty chooses",
+    mode: knowsGift ? (product ? product.title.slice(0, 40) : "I've got a link") : "Kitty chooses",
     likes: likes.length ? likes.join(", ") : "Skipped",
     dislikes: dislikes.length ? dislikes.join(", ") : "Nothing",
     wishlist: image ? "Screenshot added" : wishlistUrl.trim() ? "Link added" : "Skipped",
@@ -185,6 +209,8 @@ function StartPage() {
           expected_count: expected,
           organiser_name: orgName.trim(),
           organiser_paypal_email: orgEmail.trim(),
+          demo_speed: demoSpeed,
+          product: knowsGift && product ? { ...product, price: Math.round(targetNum * 100) / 100 } : undefined,
         },
       });
       try {
@@ -250,6 +276,13 @@ function StartPage() {
                     <span className="truncate text-[15px]">{summary[s]}</span>
                   </button>
                 ))}
+                <label className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 px-4">
+                  <span>
+                    <span className="block text-[13px] text-muted-foreground">Demo speed</span>
+                    <span className="block text-[14px]">Every hour passes in a minute, for trying Kitty out.</span>
+                  </span>
+                  <Switch checked={demoSpeed} onCheckedChange={setDemoSpeed} aria-label="Demo speed" />
+                </label>
               </div>
             )}
           </motion.div>
@@ -276,6 +309,18 @@ function StartPage() {
                     <Chip selected={knowsGift === true} onClick={() => setKnowsGift(true)}>Yes, I've a link</Chip>
                   </div>
                   {knowsGift && <Input autoFocus value={productUrl} onChange={(e) => setProductUrl(e.target.value)} placeholder="Paste the product link" inputMode="url" className="h-12 rounded-[12px]" />}
+                  {knowsGift && lookup === "loading" && (
+                    <div className="flex items-center gap-3 text-[14px] text-muted-foreground" role="status"><KittyMascot state="searching" size={56} /> Reading the price from that link...</div>
+                  )}
+                  {knowsGift && lookup === "ok" && product && (
+                    <div className="flex items-center gap-3">
+                      {product.image_url && <img src={product.image_url} alt="" className="size-14 shrink-0 rounded-[10px] border object-cover" />}
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px]">{product.title}</p>
+                        <p className="text-[13px] text-muted-foreground">{product.retailer} · <span className="tabular">{formatMoney(product.price, DEFAULT_CURRENCY, { exact: !Number.isInteger(product.price) })}</span></p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {step === "likes" && <TagPicker value={likes} onChange={setLikes} avoid={dislikes} />}
@@ -296,6 +341,8 @@ function StartPage() {
               )}
               {step === "money" && (
                 <div className="space-y-4">
+                  {knowsGift && lookup !== "ok" && <p className="text-[14px] text-muted-foreground">I couldn't read the price from that link. Pop it in here.</p>}
+                  {knowsGift && lookup === "ok" && product && <p className="text-[14px] text-muted-foreground">The target is set to the gift's price. Change it if the price looks off.</p>}
                   <div className="flex flex-wrap items-center gap-2">
                     {!knowsGift && TARGETS.map((t) => <Chip key={t} selected={targetNum === t} onClick={() => setTarget(String(t))}>{formatMoney(t, DEFAULT_CURRENCY)}</Chip>)}
                     <Input value={target} onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" aria-label="Custom amount" className="h-11 w-28 rounded-full text-center tabular" />
@@ -306,7 +353,7 @@ function StartPage() {
                       <span className="w-20 text-center text-[15px] tabular">{expected} people</span>
                       <Button type="button" variant="quiet" size="icon" className="size-11" onClick={() => setExpected((n) => Math.min(500, n + 1))} aria-label="More people">+</Button>
                     </div>
-                    <span className="text-[14px] text-muted-foreground tabular">about {formatMoney(share, DEFAULT_CURRENCY)} each</span>
+                    <span className="text-[14px] text-muted-foreground tabular">{knowsGift ? `About ${formatMoney(share, DEFAULT_CURRENCY)} each for ${expected} people` : `about ${formatMoney(share, DEFAULT_CURRENCY)} each`}</span>
                   </div>
                 </div>
               )}

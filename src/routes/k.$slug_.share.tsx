@@ -51,7 +51,7 @@ function SharePage() {
 
   return (
     <div className="min-h-screen">
-      <TopBar />
+      <TopBar demo={!!data?.pot.demo_speed} demoFactor={data?.pot.demo_factor} />
       <main className="mx-auto max-w-2xl space-y-10 px-5 pt-10 pb-20">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
           <h1 className="text-[44px] md:text-[64px]">One link. <em>Kitty</em> handles the rest.</h1>

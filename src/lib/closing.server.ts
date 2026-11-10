@@ -2,7 +2,8 @@
 // Every transition is a conditional update on the current status, so a replayed tick is a no-op.
 // All money maths lives in ./closing (pure, tested); this file only does I/O and narration.
 import { formatMoney } from "./kitty";
-import { afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, type VoteWindow } from "./closing";
+import { afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, effectiveDeadline, isDemoHold, reminderDueAt, type VoteWindow } from "./closing";
+import { OCCASIONS } from "./config";
 
 const HELD = ["authorized", "reauthorized"];
 const LOCK_MS = 90_000;
@@ -90,7 +91,10 @@ async function step(potId: string) {
   const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
   if (!pot) return;
   const now = new Date();
-  if (pot.status === "collecting") return closeIfDue(pot, now);
+  if (pot.status === "collecting") {
+    await maybeDraftReminder(pot, now);
+    return closeIfDue(pot, now);
+  }
   if (pot.status === "voting") return closeVoteIfDue(pot, now);
   if (pot.status === "veto") {
     const d = await currentDecision(pot.id);
@@ -106,8 +110,9 @@ async function step(potId: string) {
 // ---------- close ----------
 async function closeIfDue(pot: any, now: Date) {
   const raised = await heldTotal(pot.id);
-  if (!shouldClose({ raised, target: Number(pot.target_amount), deadline: new Date(pot.deadline_at), now })) return;
+  if (!shouldClose({ raised, target: Number(pot.target_amount), deadline: effectiveDeadline(new Date(pot.created_at), new Date(pot.deadline_at), pot), now })) return;
   const money = (n: number) => formatMoney(n, pot.currency);
+  if (pot.mode === "fixed_split") return closeFixed(pot, now, raised);
 
   if (raised <= 0) {
     if (await transition(pot.id, "collecting", { status: "cancelled", closed_at: now.toISOString() })) {
@@ -138,7 +143,7 @@ async function closeIfDue(pot: any, now: Date) {
     }
     return;
   }
-  const closes = voteClosesAt(pot.vote_window as VoteWindow, now, pot.demo_speed);
+  const closes = voteClosesAt(pot.vote_window as VoteWindow, now, pot);
   if (await transition(pot.id, "collecting", { status: "voting", closed_at: now.toISOString(), vote_closes_at: closes?.toISOString(), vote_candidate_ids: picks.map((p) => p.id) })) {
     await say(pot.id, "vote_open", `Time to vote! ${picks.length} picks are up. It closes at ${clockTime(closes!)} or once everyone who wants to vote has.`);
   }
@@ -180,7 +185,7 @@ export async function startVeto(pot: any, pick: any | null, by: "votes" | "agent
     await say(pot.id, "close_waiting", "I couldn't find a gift the pot covers. The organiser can extend the deadline or top up.");
     return;
   }
-  const ms = vetoMs(pot.demo_speed);
+  const ms = vetoMs(pot);
   const buyAt = new Date(Date.now() + ms);
   const { explainChoice } = await import("./ai.server");
   const why = await explainChoice({ name: pot.recipient_name, likes: pot.likes ?? [], title: pick.title, retailer: pick.retailer, votes: vs?.tally[pick.id] ?? 0, voters: vs?.voted ?? 0, reason: pick.reason });
@@ -232,7 +237,9 @@ async function checkHolds(pot: any) {
 async function buy(pot: any) {
   const d = await admin();
   const money = (n: number) => formatMoney(n, pot.currency, { exact: !Number.isInteger(n) });
-  if (!process.env["PAYPAL_CLIENT_ID"] || !process.env["PAYPAL_CLIENT_SECRET"]) {
+  const { data: liveRows } = await d.from("contributions").select("is_seeded, authorization_id").eq("pot_id", pot.id).in("status", HELD);
+  const needsPayPal = (liveRows ?? []).some((c) => !isDemoHold(c));
+  if (needsPayPal && (!process.env["PAYPAL_CLIENT_ID"] || !process.env["PAYPAL_CLIENT_SECRET"])) {
     const { data: last } = await d.from("agent_events").select("kind").eq("pot_id", pot.id).order("at", { ascending: false }).limit(1);
     if (last?.[0]?.kind !== "paypal_unconfigured") await say(pot.id, "paypal_unconfigured", "Ready to buy, but PayPal isn't connected yet. Every hold is still only held.");
     return;
@@ -305,6 +312,11 @@ async function buy(pot: any) {
   for (const c of todo ?? []) {
     const share = Number(c.planned_capture);
     if (share <= 0) continue;
+    if (isDemoHold(c)) {
+      // Seeded demo hold: never sent to PayPal. Recorded as a demo payment with no capture id.
+      await d.from("contributions").update({ status: "captured", captured_amount: share, capture_id: null }).eq("id", c.id).in("status", HELD);
+      continue;
+    }
     try {
       const cap = await captureAuthorization(c.authorization_id!, share, pot.currency, `cap-${c.id}`);
       await d.from("contributions").update({ status: "captured", capture_id: cap.id, captured_amount: share }).eq("id", c.id).in("status", HELD);
@@ -330,6 +342,10 @@ async function buy(pot: any) {
     const excess = Math.round((captured - plan.to.price) * 100) / 100;
     for (const r of proportionalRefund((caps ?? []).map((c) => ({ id: c.id, amount: Number(c.captured_amount) })), excess)) {
       const c = caps!.find((x) => x.id === r.id)!;
+      if (!c.capture_id) {
+        await d.from("contributions").update({ captured_amount: Math.round((Number(c.captured_amount) - r.amount) * 100) / 100 }).eq("id", c.id);
+        continue;
+      }
       try {
         await refundCapture(c.capture_id!, `ref-${c.capture_id}-swap`, { value: r.amount, currency: pot.currency });
         await d.from("contributions").update({ captured_amount: Math.round((Number(c.captured_amount) - r.amount) * 100) / 100 }).eq("id", c.id);
@@ -373,8 +389,19 @@ async function payout(pot: any, gift: any, price: number) {
   const { createPayout, refundCapture, PayPalError } = await pp();
   const batchId = `pot-${pot.id}`;
   const { data: existing } = await d.from("payouts").select("*").eq("pot_id", pot.id).maybeSingle();
-  if (existing && ["SUCCESS", "PENDING", "PROCESSING", "fallback"].includes(existing.status ?? "")) {
+  if (existing && ["SUCCESS", "PENDING", "PROCESSING", "fallback", "demo"].includes(existing.status ?? "")) {
     await transition(pot.id, "buying", { status: "done" });
+    return;
+  }
+  const { data: paidRows } = await d.from("contributions").select("capture_id, captured_amount").eq("pot_id", pot.id).eq("status", "captured");
+  const demoPaid = (paidRows ?? []).filter((c) => !c.capture_id).reduce((s, c) => s + Number(c.captured_amount ?? 0), 0);
+  if (demoPaid > 0) {
+    // Some of the money is demo holds, so a real payout would be dishonest. Record it as a demo payout.
+    const realPaid = Math.round(((paidRows ?? []).reduce((s, c) => s + Number(c.captured_amount ?? 0), 0) - demoPaid) * 100) / 100;
+    const row = { pot_id: pot.id, payout_batch_id: null, amount: price, status: "demo", buy_url: gift.offer_url };
+    if (existing) await d.from("payouts").update(row).eq("pot_id", pot.id); else await d.from("payouts").insert(row);
+    await transition(pot.id, "buying", { status: "done" });
+    await say(pot.id, "paid_out", `All done! This is a demo pot, so no real payout went to ${pot.organiser_name}.${realPaid > 0 ? ` The ${formatMoney(realPaid, pot.currency, { exact: true })} from real sandbox holds is safe in Kitty's PayPal account.` : " Nobody's real money moved."}`);
     return;
   }
   if (!existing) await d.from("payouts").insert({ pot_id: pot.id, payout_batch_id: batchId, amount: price, status: "sending", buy_url: gift.offer_url });
@@ -406,8 +433,9 @@ async function payout(pot: any, gift: any, price: number) {
   await d.from("payouts").update({ status: "failed", error: String(lastErr).slice(0, 500) }).eq("pot_id", pot.id);
   const { data: caps } = await d.from("contributions").select("id, capture_id").eq("pot_id", pot.id).eq("status", "captured");
   for (const c of caps ?? []) {
+    if (!c.capture_id) continue;
     try {
-      const r = await refundCapture(c.capture_id!, `ref-${c.capture_id}-payout`);
+      const r = await refundCapture(c.capture_id, `ref-${c.capture_id}-payout`);
       await d.from("contributions").update({ status: "refunded", refund_id: r.id }).eq("id", c.id);
     } catch (e) { console.error("refund failed", c.id, e); }
   }
@@ -422,7 +450,9 @@ export async function refundAndCancel(pot: any, line: string) {
   const { data: rows } = await d.from("contributions").select("id, status, capture_id, authorization_id").eq("pot_id", pot.id).in("status", [...HELD, "captured"]);
   for (const c of rows ?? []) {
     try {
-      if (c.status === "captured" && c.capture_id) {
+      if (!c.capture_id && !c.authorization_id) {
+        await d.from("contributions").update({ status: "voided" }).eq("id", c.id); // demo hold, nothing at PayPal
+      } else if (c.status === "captured" && c.capture_id) {
         const r = await refundCapture(c.capture_id, `ref-${c.capture_id}-cancel`);
         await d.from("contributions").update({ status: "refunded", refund_id: r.id }).eq("id", c.id);
       } else if (c.authorization_id) {
@@ -463,4 +493,44 @@ export async function duePots() {
   const d = await admin();
   const { data } = await d.from("pots").select("id, status, deadline_at").in("status", ["collecting", "voting", "veto", "buying"]).limit(200);
   return (data ?? []).map((p) => p.id);
+}
+
+// ---------- fixed split: no search, no vote, straight to the countdown once full ----------
+async function closeFixed(pot: any, now: Date, raised: number) {
+  const pick = (await rankedPicks(pot.id))[0];
+  const money = (n: number) => formatMoney(n, pot.currency);
+  if (!pick) {
+    await say(pot.id, "close_waiting", "I don't have the gift's details yet. The organiser can add them from the manage page.");
+    return;
+  }
+  if (cents(raised) < cents(Number(pick.price))) {
+    const d = await admin();
+    const { data: last } = await d.from("agent_events").select("kind").eq("pot_id", pot.id).order("at", { ascending: false }).limit(1);
+    if (last?.[0]?.kind !== "fixed_short") await say(pot.id, "fixed_short", `We're at ${money(raised)} of ${money(Number(pick.price))} for the ${short(pick.title)}. The organiser can extend the deadline to give people more time.`);
+    return;
+  }
+  if (await transition(pot.id, "collecting", { status: "veto", closed_at: now.toISOString(), vote_candidate_ids: [pick.id] })) {
+    await say(pot.id, "fixed_full", `The pot's full for the ${short(pick.title)}. No vote needed, so the countdown starts now.`);
+    await startVeto({ ...pot, status: "veto" }, pick, "organiser");
+  }
+}
+
+// ---------- reminder nudge ----------
+async function maybeDraftReminder(pot: any, now: Date) {
+  if (!pot.reminders_enabled || pot.reminder_drafted_at) return;
+  const created = new Date(pot.created_at);
+  const due = reminderDueAt(created, new Date(pot.deadline_at), pot);
+  if (now.getTime() < due.getTime()) return;
+  if (now.getTime() >= effectiveDeadline(created, new Date(pot.deadline_at), pot).getTime()) return;
+  const d = await admin();
+  const { count } = await d.from("contributions").select("id", { count: "exact", head: true }).eq("pot_id", pot.id).in("status", [...HELD, "captured"]);
+  const missing = Math.max(0, (pot.expected_count ?? 0) - (count ?? 0));
+  // Claim the reminder atomically so overlapping ticks only draft once.
+  const { data: won } = await d.from("pots").update({ reminder_drafted_at: now.toISOString() }).eq("id", pot.id).is("reminder_drafted_at", null).select("id");
+  if (!won?.length || missing <= 0) return;
+  const { draftNudge } = await import("./ai.server");
+  const occ = OCCASIONS.find((o) => o.value === pot.occasion)?.noun ?? "";
+  const text = await draftNudge({ name: pot.recipient_name, occasion: occ, missing });
+  await d.from("reminders").insert({ pot_id: pot.id, draft_text: text, missing_count: missing });
+  await say(pot.id, "reminder_drafted", `I drafted a nudge for the ${missing === 1 ? "1 person who hasn't" : `${missing} people who haven't`} chipped in yet.`);
 }

@@ -72,3 +72,25 @@ export async function explainChoice(o: { name: string; likes: string[]; title: s
     return fallback;
   }
 }
+
+/** One short reminder nudge in Kitty's voice. `[link]` is swapped for the share link in the app. */
+export async function draftNudge(o: { name: string; occasion: string; missing: number }): Promise<string> {
+  const occ = o.occasion ? `${o.occasion} ` : "";
+  const fallback = `Quick one: we're chipping in for ${o.name}'s ${occ}gift. It's a hold, so nobody's charged unless the gift happens. [link]`;
+  try {
+    const res = await generateChatCompletion({
+      model: "google/gemini-3.1-flash-lite",
+      messages: [
+        { role: "system", content: 'Write ONE friendly reminder message (under 200 characters, UK spelling, no em dashes) a colleague could paste into WhatsApp to nudge people who have not chipped in to a group gift yet. Mention it is a hold, so nobody is charged unless the gift happens. End with the literal token [link]. Return JSON {"text": string}. Example: "Quick one: we\'re chipping in for Priya\'s leaving gift. It\'s a hold, so nobody\'s charged unless the gift happens. [link]"' },
+        { role: "user", content: JSON.stringify(o) },
+      ],
+      response_format: { type: "json_object" },
+    });
+    const c = (res as any)?.choices?.[0]?.message?.content;
+    const text = String(JSON.parse(String(typeof c === "string" ? c : "").replace(/^```(json)?|```$/g, "").trim()).text ?? "").replace(/\u2014/g, ",").trim();
+    if (!text) return fallback;
+    return (text.includes("[link]") ? text : `${text} [link]`).slice(0, 300);
+  } catch {
+    return fallback;
+  }
+}

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Lock } from "lucide-react";
+import { Lock, FastForward } from "lucide-react";
 
 export function KittyMark({ className = "size-7", live = false }: { className?: string; live?: boolean }) {
   // Static mark: Kitty's head peeking over a kraft box with a red ribbon.
@@ -49,10 +49,27 @@ export function PayPalTrust({ className = "" }: { className?: string }) {
   );
 }
 
-export function TopBar({ right }: { right?: React.ReactNode }) {
+/** Small tan pill shown on every pot screen while the demo clock is running. */
+export function DemoBadge({ factor }: { factor?: number | null | undefined }) {
   return (
-    <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-3 md:px-8">
-      <Logo />
+    <span className="inline-flex h-6 items-center gap-1 rounded-full bg-kraft-soft px-2 text-[12px] font-medium text-kraft-deep" title={`Time runs ${factor ?? 60}x faster on this kitty`}>
+      <FastForward className="size-3" aria-hidden="true" /> Demo speed
+    </span>
+  );
+}
+
+/** Marks rows added by the demo seed. */
+export function DemoTag() {
+  return <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-kraft/50 px-1.5 text-[11px] font-medium uppercase tracking-wide text-kraft-deep">demo</span>;
+}
+
+export function TopBar({ right, demo, demoFactor }: { right?: React.ReactNode; demo?: boolean | undefined; demoFactor?: number | null | undefined }) {
+  return (
+    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-3 md:px-8">
+      <div className="flex items-center gap-2">
+        <Logo />
+        {demo && <DemoBadge factor={demoFactor} />}
+      </div>
       {right}
     </header>
   );

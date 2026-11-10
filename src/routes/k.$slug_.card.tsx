@@ -31,7 +31,7 @@ function CardPage() {
   const { pot, signatures, people } = data;
   return (
     <div className="min-h-screen">
-      <TopBar />
+      <TopBar demo={!!data?.pot.demo_speed} demoFactor={data?.pot.demo_factor} />
       <main className="mx-auto max-w-3xl space-y-10 px-5 pt-10 pb-20">
         <div className="space-y-3 text-center">
           <h1 className="text-[48px] md:text-[64px]">For <em>{pot.recipient_name}</em>, with love.</h1>

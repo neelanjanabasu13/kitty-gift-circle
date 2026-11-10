@@ -85,3 +85,49 @@ describe("closing and failures", () => {
     expect(holdAction({ ...base, status: "VOIDED", honorExpiresAt: null })).toBe("drop");
   });
 });
+
+import { clockOf, effectiveDeadline, isDemoHold, paypalHolds, reminderDueAt, scaleMs, storedDeadlineFor, vetoMs, voteDurationMs } from "./closing";
+
+describe("demo clock", () => {
+  const demo = { demo_speed: true, demo_factor: 60 };
+  it("compresses windows at 60x", () => {
+    expect(voteDurationMs("1h", demo)).toBe(60_000);
+    expect(voteDurationMs("1d", demo)).toBe(24 * 60_000);
+    expect(vetoMs(demo)).toBe(2 * 60_000);
+  });
+  it("leaves real time alone when off", () => {
+    expect(voteDurationMs("1h", { demo_speed: false, demo_factor: 60 })).toBe(3600_000);
+    expect(vetoMs(false)).toBe(2 * 3600_000);
+  });
+  it("defaults to 60x", () => {
+    expect(clockOf(true).factor).toBe(60);
+    expect(scaleMs(3600_000, { demo_speed: true, demo_factor: null })).toBe(60_000);
+  });
+  it("compresses deadlines from creation and inverts", () => {
+    const created = new Date("2026-01-01T12:00:00Z");
+    const eff = effectiveDeadline(created, new Date("2026-01-03T12:00:00Z"), demo);
+    expect(eff.toISOString()).toBe("2026-01-01T12:48:00.000Z");
+    expect(storedDeadlineFor(created, eff, demo).toISOString()).toBe("2026-01-03T12:00:00.000Z");
+  });
+  it("puts the nudge 24 pot-hours before the deadline", () => {
+    const created = new Date("2026-01-01T12:00:00Z");
+    expect(reminderDueAt(created, new Date("2026-01-03T12:00:00Z"), demo).toISOString()).toBe("2026-01-01T12:24:00.000Z");
+    expect(reminderDueAt(created, new Date("2026-01-03T12:00:00Z"), false).toISOString()).toBe("2026-01-02T12:00:00.000Z");
+  });
+});
+
+describe("seeded holds", () => {
+  it("a seeded row without an authorization is a demo hold", () => {
+    expect(isDemoHold({ is_seeded: true, authorization_id: null })).toBe(true);
+    expect(isDemoHold({ is_seeded: true, authorization_id: "AUTH1" })).toBe(false);
+    expect(isDemoHold({ is_seeded: false, authorization_id: null })).toBe(false);
+  });
+  it("only real authorizations are sent to PayPal", () => {
+    const rows = [
+      { id: "a", is_seeded: true, authorization_id: null },
+      { id: "b", is_seeded: true, authorization_id: "AUTH-B" },
+      { id: "c", is_seeded: false, authorization_id: "AUTH-C" },
+    ];
+    expect(paypalHolds(rows).map((r) => r.id)).toEqual(["b", "c"]);
+  });
+});

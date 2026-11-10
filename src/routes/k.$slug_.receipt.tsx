@@ -35,7 +35,7 @@ function ReceiptPage() {
   const { pot, receipt } = data;
   return (
     <div className="min-h-screen">
-      <TopBar />
+      <TopBar demo={!!data?.pot.demo_speed} demoFactor={data?.pot.demo_factor} />
       <main className="mx-auto max-w-3xl space-y-10 px-5 pt-8 pb-20">
         {pot.status === "cancelled" ? (
           <Cancelled />
@@ -61,11 +61,11 @@ function ReceiptPage() {
               mineId={mine?.contributionId}
               mine={mySplit}
               details={[
-                ...receipt.payments.map((p) => ({ label: `Capture${p.name ? `, ${p.name}` : ""}`, value: p.capture_id })),
+                ...receipt.payments.map((p) => ({ label: `Capture${p.name ? `, ${p.name}` : ""}${p.demoHold ? " (demo hold, not a real PayPal hold)" : ""}`, value: p.capture_id })),
                 { label: "Payout batch", value: receipt.payout?.status === "fallback" ? null : receipt.payout?.batch_id },
                 { label: "Payout item", value: receipt.payout?.item_id },
               ]}
-              payoutLine={receipt.payout?.status === "fallback" ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.` : `Paid out to ${pot.organiser_name} through PayPal.`}
+              payoutLine={receipt.payout?.status === "demo" ? `This is a demo pot, so nothing was paid out to ${pot.organiser_name}. Demo holds were never sent to PayPal.` : receipt.payout?.status === "fallback" ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.` : `Paid out to ${pot.organiser_name} through PayPal.`}
               buyUrl={receipt.gift.offer_url}
               notes={[]}
             />

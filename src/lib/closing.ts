@@ -62,18 +62,60 @@ export function releasedAmount(held: number, price: number) {
 
 export type VoteWindow = "off" | "1h" | "1d" | "all_in";
 
+// ---------- Demo clock: the ONE place time compresses ----------
+export const DEMO_FACTOR = 60;
+export type Clock = { demo: boolean; factor: number };
+/** `true` means demo at the default factor; a pot row works too. */
+export type ClockLike = Clock | boolean | { demo_speed: boolean; demo_factor?: number | null };
+
+export function clockOf(c: ClockLike): Clock {
+  if (typeof c === "boolean") return { demo: c, factor: DEMO_FACTOR };
+  if ("demo" in c) return { demo: c.demo, factor: Math.max(1, c.factor || DEMO_FACTOR) };
+  return { demo: !!c.demo_speed, factor: Math.max(1, c.demo_factor || DEMO_FACTOR) };
+}
+/** Real-world duration -> duration on this pot's clock (1 hour = 1 minute at 60x). */
+export function scaleMs(ms: number, clock: ClockLike = false) {
+  const c = clockOf(clock);
+  return c.demo ? Math.round(ms / c.factor) : ms;
+}
+/** The deadline as the pot's clock sees it: the gap from creation is compressed. */
+export function effectiveDeadline(createdAt: Date, deadline: Date, clock: ClockLike = false) {
+  const gap = Math.max(0, deadline.getTime() - createdAt.getTime());
+  return new Date(createdAt.getTime() + scaleMs(gap, clock));
+}
+/** Inverse of effectiveDeadline: the stored deadline that produces `effective`. */
+export function storedDeadlineFor(createdAt: Date, effective: Date, clock: ClockLike = false) {
+  const c = clockOf(clock);
+  const gap = Math.max(0, effective.getTime() - createdAt.getTime());
+  return new Date(createdAt.getTime() + (c.demo ? gap * c.factor : gap));
+}
+/** Reminder nudge is due 24 hours (on the pot's clock) before the deadline. */
+export function reminderDueAt(createdAt: Date, deadline: Date, clock: ClockLike = false) {
+  return new Date(effectiveDeadline(createdAt, deadline, clock).getTime() - scaleMs(86400_000, clock));
+}
+
+// ---------- Seeded demo holds ----------
+/** A seeded row with no real sandbox authorization is a demo hold: never sent to PayPal. */
+export function isDemoHold(c: { is_seeded?: boolean | null; authorization_id?: string | null }) {
+  return !!c.is_seeded && !c.authorization_id;
+}
+/** Only these may be captured, voided, reauthorised or looked up with PayPal. */
+export function paypalHolds<T extends { is_seeded?: boolean | null; authorization_id?: string | null }>(rows: T[]) {
+  return rows.filter((r) => !!r.authorization_id && !isDemoHold(r));
+}
+
 /** All-in votes still stop after 3 days so holds stay within PayPal's honour period. */
 export const ALL_IN_CAP_MS = 3 * 86400_000;
 
-export function voteDurationMs(window: VoteWindow, demo = false) {
+export function voteDurationMs(window: VoteWindow, clock: ClockLike = false) {
   if (window === "off") return 0;
   const ms = window === "1h" ? 3600_000 : window === "1d" ? 86400_000 : ALL_IN_CAP_MS;
-  return demo ? Math.min(ms, window === "1h" ? 120_000 : 300_000) : ms;
+  return scaleMs(ms, clock);
 }
 
-export function voteClosesAt(window: VoteWindow, from: Date, demo = false): Date | null {
+export function voteClosesAt(window: VoteWindow, from: Date, clock: ClockLike = false): Date | null {
   if (window === "off") return null;
-  return new Date(from.getTime() + voteDurationMs(window, demo));
+  return new Date(from.getTime() + voteDurationMs(window, clock));
 }
 
 /** Closes at the window end OR when every contributor who hasn't opted out has voted. */
@@ -92,9 +134,8 @@ export function pickWinner<T extends { id: string; total_score: number | null; v
 }
 
 export const VETO_MS = 2 * 3600_000;
-export const VETO_DEMO_MS = 3 * 60_000;
-export function vetoMs(demo = false) {
-  return demo ? VETO_DEMO_MS : VETO_MS;
+export function vetoMs(clock: ClockLike = false) {
+  return scaleMs(VETO_MS, clock);
 }
 
 /** Whether the pot should close: target reached or deadline passed. */

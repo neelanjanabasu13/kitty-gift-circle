@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TopBar } from "@/components/kitty/Logo";
-import { healthCheck } from "@/lib/kitty.functions";
+import { healthCheck, seedDemoPot } from "@/lib/kitty.functions";
 
 export const Route = createFileRoute("/health")({
   head: () => ({
@@ -33,6 +33,20 @@ function HealthPage() {
   const [res, setRes] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const navigate = useNavigate();
+  const startDemo = async () => {
+    setSeeding(true); setErr(null);
+    try {
+      const r = await seedDemoPot({ data: {} });
+      try {
+        const store = JSON.parse(localStorage.getItem("kitty:admin") || "{}");
+        store[r.slug] = r.adminToken;
+        localStorage.setItem("kitty:admin", JSON.stringify(store));
+      } catch { /* ignore */ }
+      navigate({ to: "/k/$slug/manage", params: { slug: r.slug }, search: { t: r.adminToken } });
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't start the demo pot."); setSeeding(false); }
+  };
   return (
     <div className="min-h-screen">
       <TopBar />
@@ -55,6 +69,13 @@ function HealthPage() {
             <Row label={`Test hold order (1.00 ${res.currency})`} ok={res.order.ok} detail={res.order.id ? `${res.order.id} · ${res.order.status}` : res.order.error} />
           </ul>
         )}
+        <p className="border-t pt-6 text-[14px] text-muted-foreground">
+          Want to see it all move?{" "}
+          <button type="button" onClick={startDemo} disabled={seeding} className="inline-flex min-h-11 items-center text-foreground underline underline-offset-4">
+            {seeding ? "Setting up Priya's pot..." : "Start the demo pot"}
+          </button>
+          . It has 9 demo chip-ins that are never sent to PayPal, and runs at demo speed.
+        </p>
       </main>
     </div>
   );

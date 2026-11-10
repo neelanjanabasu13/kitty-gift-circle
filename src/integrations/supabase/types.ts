@@ -432,10 +432,12 @@ export type Database = {
           created_at: string
           currency: string
           deadline_at: string
+          demo_factor: number
           demo_speed: boolean
           dislikes: string[]
           expected_count: number
           id: string
+          is_demo: boolean
           last_search_band: number
           last_top_categories: string[]
           likes: string[]
@@ -444,6 +446,7 @@ export type Database = {
           organiser_name: string
           organiser_paypal_email: string
           recipient_name: string
+          reminder_drafted_at: string | null
           reminders_enabled: boolean
           slug: string
           status: string
@@ -466,10 +469,12 @@ export type Database = {
           created_at?: string
           currency?: string
           deadline_at: string
+          demo_factor?: number
           demo_speed?: boolean
           dislikes?: string[]
           expected_count?: number
           id?: string
+          is_demo?: boolean
           last_search_band?: number
           last_top_categories?: string[]
           likes?: string[]
@@ -478,6 +483,7 @@ export type Database = {
           organiser_name: string
           organiser_paypal_email: string
           recipient_name: string
+          reminder_drafted_at?: string | null
           reminders_enabled?: boolean
           slug: string
           status?: string
@@ -500,10 +506,12 @@ export type Database = {
           created_at?: string
           currency?: string
           deadline_at?: string
+          demo_factor?: number
           demo_speed?: boolean
           dislikes?: string[]
           expected_count?: number
           id?: string
+          is_demo?: boolean
           last_search_band?: number
           last_top_categories?: string[]
           likes?: string[]
@@ -512,6 +520,7 @@ export type Database = {
           organiser_name?: string
           organiser_paypal_email?: string
           recipient_name?: string
+          reminder_drafted_at?: string | null
           reminders_enabled?: boolean
           slug?: string
           status?: string
@@ -531,6 +540,7 @@ export type Database = {
           created_at: string
           draft_text: string | null
           id: string
+          missing_count: number | null
           pot_id: string
         }
         Insert: {
@@ -538,6 +548,7 @@ export type Database = {
           created_at?: string
           draft_text?: string | null
           id?: string
+          missing_count?: number | null
           pot_id: string
         }
         Update: {
@@ -545,6 +556,7 @@ export type Database = {
           created_at?: string
           draft_text?: string | null
           id?: string
+          missing_count?: number | null
           pot_id?: string
         }
         Relationships: [

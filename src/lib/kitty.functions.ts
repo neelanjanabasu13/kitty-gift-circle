@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { DEFAULT_CURRENCY } from "./config";
+import { DEMO_FACTOR, effectiveDeadline, isDemoHold, scaleMs, storedDeadlineFor } from "./closing";
 
 // All Kitty reads and writes run here with the server client. Public reads are keyed on slug and
 // hide amounts/names per visibility; organiser actions require the pot's admin token.
@@ -42,6 +43,15 @@ const createPotSchema = z.object({
   expected_count: z.number().int().min(1).max(500),
   organiser_name: z.string().trim().min(1).max(60),
   organiser_paypal_email: z.string().trim().email().max(200),
+  demo_speed: z.boolean().optional(),
+  product: z.object({
+    title: z.string().trim().min(1).max(300),
+    image_url: z.string().url().max(1000).nullable().optional(),
+    retailer: z.string().max(120).nullable().optional(),
+    price: z.number().min(1).max(10000),
+    offer_url: z.string().url().max(1000),
+    channel3_product_id: z.string().max(200).nullable().optional(),
+  }).optional(),
 });
 
 export const createPot = createServerFn({ method: "POST" })
@@ -84,6 +94,8 @@ export const createPot = createServerFn({ method: "POST" })
         expected_count: data.expected_count,
         organiser_name: data.organiser_name,
         organiser_paypal_email: data.organiser_paypal_email,
+        demo_speed: !!data.demo_speed,
+        demo_factor: DEMO_FACTOR,
       })
       .select("id, slug, admin_token")
       .single();
@@ -95,6 +107,29 @@ export const createPot = createServerFn({ method: "POST" })
       likes: data.likes,
       mode: data.mode,
     });
+    if (data.mode === "fixed_split") {
+      const pr = data.product;
+      let host: string | null = null;
+      if (data.wishlist_url) { try { host = new URL(data.wishlist_url).hostname.replace(/^www\./, ""); } catch { /* ignore */ } }
+      await db.from("candidates").insert({
+        pot_id: pot.id,
+        channel3_product_id: pr?.channel3_product_id ?? null,
+        title: pr?.title ?? `The gift ${data.organiser_name} picked`,
+        image_url: pr?.image_url ?? null,
+        offer_url: pr?.offer_url ?? (data.wishlist_url || null),
+        retailer: pr?.retailer ?? host,
+        price: pr?.price ?? data.target_amount,
+        currency: DEFAULT_CURRENCY,
+        category: "chosen",
+        fit_score: 1,
+        total_score: 1,
+        rank: 1,
+        reason: `${data.organiser_name} picked this one, so there's no vote.`,
+        fetched_at: new Date().toISOString(),
+      });
+      await logEvent(pot.id, "fixed_gift", `${data.organiser_name} already knows the gift. I'll collect, then start the countdown once the pot's full.`);
+    }
+    if (data.demo_speed) await logEvent(pot.id, "demo_speed", "Demo speed is on, so an hour here passes in a minute.");
     if (data.likes.length) {
       await logEvent(pot.id, "profile_learned", `Noted: ${data.recipient_name} loves ${data.likes.slice(0, 3).join(", ")}.${data.dislikes.length ? ` I'll steer clear of ${data.dislikes.slice(0, 2).join(" and ")}.` : ""}`);
     }
@@ -109,6 +144,10 @@ export type PublicContributor = {
   visibility: "named" | "anonymous" | "amount_hidden";
   status: string;
   at: string;
+  /** Added by the demo seed. */
+  seeded: boolean;
+  /** Seeded with no real sandbox authorization: never sent to PayPal. */
+  demoHold: boolean;
 };
 
 async function loadPot(slug: string, adminToken?: string) {
@@ -118,7 +157,7 @@ async function loadPot(slug: string, adminToken?: string) {
   const isAdmin = !!adminToken && adminToken === pot.admin_token;
 
   const [{ data: contribs }, { data: sigs }, { data: events }, { data: votes }, { data: candidates }] = await Promise.all([
-    db.from("contributions").select("id, display_name, visibility, amount, status, created_at").eq("pot_id", pot.id).in("status", LIVE).order("created_at"),
+    db.from("contributions").select("id, display_name, visibility, amount, status, created_at, is_seeded, authorization_id").eq("pot_id", pot.id).in("status", LIVE).order("created_at"),
     db.from("card_signatures").select("id, name, message, created_at, contribution_id").eq("pot_id", pot.id).order("created_at"),
     db.from("agent_events").select("id, at, kind, message").eq("pot_id", pot.id).order("at", { ascending: false }).limit(30),
     db.from("category_votes").select("category").eq("pot_id", pot.id),
@@ -135,6 +174,8 @@ async function loadPot(slug: string, adminToken?: string) {
     amount: c.visibility === "amount_hidden" && !isAdmin ? null : Number(c.amount),
     status: c.status,
     at: c.created_at,
+    seeded: !!c.is_seeded,
+    demoHold: isDemoHold(c),
   }));
   const voteTally: Record<string, number> = {};
   for (const v of votes ?? []) voteTally[v.category] = (voteTally[v.category] ?? 0) + 1;
@@ -154,7 +195,7 @@ async function loadPot(slug: string, adminToken?: string) {
     const c = dec.candidate_id ? candById.get(dec.candidate_id) : undefined;
     decision = { id: dec.id, buy_at: dec.buy_at, why: dec.why, decided_by: dec.decided_by, total_seconds: dec.total_seconds, pick: c ? { id: c.id, title: c.title, price: Number(c.price), retailer: c.retailer, offer_url: c.offer_url, image_url: c.image_url } : null };
   }
-  type SplitLine = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null };
+  type SplitLine = { id: string; name: string | null; held: number | null; paid: number | null; released: number | null; demo: boolean };
   let split: null | { price: number; pot: number; lines: SplitLine[] } = null;
   if (["veto", "buying"].includes(pot.status) && decision?.pick) {
     const { splitLines } = await import("./closing");
@@ -168,7 +209,7 @@ async function loadPot(slug: string, adminToken?: string) {
         lines: lines.map((l) => {
           const c = holds.find((h) => h.id === l.id)!;
           const hide = c.visibility === "amount_hidden" && !isAdmin;
-          return { id: l.id, name: c.visibility === "anonymous" && !isAdmin ? null : c.display_name || null, held: hide ? null : l.held, paid: hide ? null : l.paid, released: hide ? null : l.released };
+          return { id: l.id, name: c.visibility === "anonymous" && !isAdmin ? null : c.display_name || null, held: hide ? null : l.held, paid: hide ? null : l.paid, released: hide ? null : l.released, demo: !!c.is_seeded };
         }),
       };
     }
@@ -181,12 +222,12 @@ async function loadPot(slug: string, adminToken?: string) {
   let receipt: null | {
     gift: { title: string; retailer: string | null; price: number; offer_url: string | null; image_url: string | null } | null;
     held: number; paid: number; released: number;
-    payments: { id: string; name: string | null; amount: number | null; capture_id: string | null }[];
+    payments: { id: string; name: string | null; amount: number | null; capture_id: string | null; seeded: boolean; demoHold: boolean }[];
     payout: { batch_id: string | null; item_id: string | null; status: string | null; amount: number | null; buy_url: string | null } | null;
   } = null;
   if (pot.status === "done") {
     const [{ data: paidRows }, { data: po }] = await Promise.all([
-      db.from("contributions").select("id, display_name, visibility, amount, captured_amount, capture_id, status").eq("pot_id", pot.id).in("status", ["captured", "voided"]).not("planned_capture", "is", null).order("created_at"),
+      db.from("contributions").select("id, display_name, visibility, amount, captured_amount, capture_id, status, is_seeded, authorization_id").eq("pot_id", pot.id).in("status", ["captured", "voided"]).not("planned_capture", "is", null).order("created_at"),
       db.from("payouts").select("*").eq("pot_id", pot.id).maybeSingle(),
     ]);
     const rows = paidRows ?? [];
@@ -198,7 +239,7 @@ async function loadPot(slug: string, adminToken?: string) {
       lines: rows.map((r) => {
         const hide = r.visibility === "amount_hidden" && !isAdmin;
         const p = r.status === "captured" ? Number(r.captured_amount ?? 0) : 0;
-        return { id: r.id, name: r.visibility === "anonymous" && !isAdmin ? null : r.display_name || null, held: hide ? null : Number(r.amount), paid: hide ? null : p, released: hide ? null : Math.round((Number(r.amount) - p) * 100) / 100 };
+        return { id: r.id, name: r.visibility === "anonymous" && !isAdmin ? null : r.display_name || null, held: hide ? null : Number(r.amount), paid: hide ? null : p, released: hide ? null : Math.round((Number(r.amount) - p) * 100) / 100, demo: !!r.is_seeded };
       }),
     };
     receipt = {
@@ -211,6 +252,8 @@ async function loadPot(slug: string, adminToken?: string) {
         name: r.visibility === "anonymous" && !isAdmin ? null : r.display_name || null,
         amount: r.visibility === "amount_hidden" && !isAdmin ? null : Number(r.captured_amount ?? 0),
         capture_id: r.capture_id,
+        seeded: !!r.is_seeded,
+        demoHold: isDemoHold(r),
       })),
       payout: po ? { batch_id: po.payout_batch_id, item_id: po.item_id, status: po.status, amount: po.amount != null ? Number(po.amount) : null, buy_url: po.buy_url } : null,
     };
@@ -230,7 +273,10 @@ async function loadPot(slug: string, adminToken?: string) {
       mode: pot.mode,
       target_amount: Number(pot.target_amount),
       currency: pot.currency,
-      deadline_at: pot.deadline_at,
+      // The deadline on the pot's own clock (compressed at demo speed). Every screen reads this one.
+      deadline_at: effectiveDeadline(new Date(pot.created_at), new Date(pot.deadline_at), pot).toISOString(),
+      demo_factor: pot.demo_factor,
+      is_demo: pot.is_demo,
       vote_window: pot.vote_window,
       expected_count: pot.expected_count,
       organiser_name: pot.organiser_name,
@@ -246,6 +292,7 @@ async function loadPot(slug: string, adminToken?: string) {
     decision,
     vote,
     receipt,
+    reminder: isAdmin ? await latestReminder(pot.id) : null,
     split,
     wishlistImageUrl,
     raised,
@@ -256,6 +303,12 @@ async function loadPot(slug: string, adminToken?: string) {
     voteTally,
     candidates: (candidates ?? []).map((c) => ({ ...c, price: c.price != null ? Number(c.price) : null, fit_score: c.fit_score != null ? Number(c.fit_score) : null })),
   };
+}
+
+async function latestReminder(potId: string) {
+  const db = await admin();
+  const { data } = await db.from("reminders").select("id, draft_text, approved_at, missing_count, created_at").eq("pot_id", potId).order("created_at", { ascending: false }).limit(1);
+  return data?.[0] ?? null;
 }
 
 export type PotView = NonNullable<Awaited<ReturnType<typeof loadPot>>>;
@@ -283,10 +336,10 @@ export const createContributionOrder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => contribSchema.parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
-    const { data: pot } = await db.from("pots").select("id, status, currency, recipient_name, deadline_at").eq("slug", data.slug).maybeSingle();
+    const { data: pot } = await db.from("pots").select("id, status, currency, recipient_name, deadline_at, created_at, demo_speed, demo_factor").eq("slug", data.slug).maybeSingle();
     if (!pot) throw new Error("We can't find this kitty. Check the link with the organiser.");
     if (pot.status !== "collecting") throw new Error("This kitty isn't taking contributions any more.");
-    if (new Date(pot.deadline_at).getTime() < Date.now()) throw new Error("The deadline for this kitty has passed.");
+    if (effectiveDeadline(new Date(pot.created_at), new Date(pot.deadline_at), pot).getTime() < Date.now()) throw new Error("The deadline for this kitty has passed.");
     if (data.visibility !== "anonymous" && !data.display_name) throw new Error("Add your name, or choose Anonymous.");
 
     const amount = Math.round(data.amount * 100) / 100;
@@ -600,8 +653,11 @@ export const extendDeadline = createServerFn({ method: "POST" })
     const { data: live } = await db.from("contributions").select("amount").eq("pot_id", pot!.id).in("status", ["authorized", "reauthorized"]);
     const total = (live ?? []).reduce((s, x) => s + Number(x.amount), 0);
     if (total >= Number(pot!.target_amount)) throw new Error("The pot's already full, so there's nothing to wait for.");
-    const base = Math.max(Date.now(), new Date(pot!.deadline_at).getTime());
-    const deadline = new Date(base + data.days * 86400_000).toISOString();
+    // Extend on the pot's own clock: at demo speed +1 day is +24 minutes.
+    const created = new Date(pot!.created_at);
+    const eff = effectiveDeadline(created, new Date(pot!.deadline_at), pot!);
+    const target = new Date(Math.max(Date.now(), eff.getTime()) + scaleMs(data.days * 86400_000, pot!));
+    const deadline = storedDeadlineFor(created, target, pot!).toISOString();
     await db.from("decisions").update({ vetoed_at: new Date().toISOString() }).eq("pot_id", pot!.id).is("vetoed_at", null);
     await db.from("final_votes").delete().eq("pot_id", pot!.id);
     await db.from("pots").update({ status: "collecting", deadline_at: deadline, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null }).eq("id", pot!.id);
@@ -624,4 +680,163 @@ export const getMySplit = createServerFn({ method: "POST" })
       authorizationId: me?.authorization_id ?? null,
       captureId: me?.capture_id ?? null,
     };
+  });
+
+// ---------- Phase 4: demo world ----------
+export const setDemoSpeed = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100), enabled: z.boolean() }).parse(d))
+  .handler(async ({ data }) => {
+    const p = await requireAdmin(data.slug, data.adminToken);
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("created_at, deadline_at, demo_speed, demo_factor").eq("id", p.id).single();
+    if (!pot || pot.demo_speed === data.enabled) return { enabled: data.enabled };
+    // Keep the deadline the organiser sees where it is: re-express it on the new clock.
+    const created = new Date(pot.created_at);
+    const eff = effectiveDeadline(created, new Date(pot.deadline_at), pot);
+    const deadline_at = storedDeadlineFor(created, eff, { demo: data.enabled, factor: pot.demo_factor || DEMO_FACTOR }).toISOString();
+    await db.from("pots").update({ demo_speed: data.enabled, deadline_at }).eq("id", p.id);
+    await logEvent(p.id, "demo_speed", data.enabled ? "Demo speed is on, so an hour here passes in a minute." : "Demo speed is off. Back to real time.");
+    return { enabled: data.enabled };
+  });
+
+const SEEDS: { name: string; amount: number; visibility: "named" | "anonymous" | "amount_hidden"; message?: string; vote?: string }[] = [
+  { name: "Sam", amount: 10, visibility: "named", message: "Priya! The kitchen won't be the same without you. Come back and cook for us.", vote: "cooking" },
+  { name: "Aisha", amount: 15, visibility: "named", message: "Thank you for every coffee run and every kind word. Good luck!", vote: "coffee" },
+  { name: "Tom", amount: 10, visibility: "amount_hidden", message: "You made Mondays bearable. Go and be brilliant.", vote: "cooking" },
+  { name: "Mei", amount: 12, visibility: "named", message: "Miss you already. Send pictures of everything you make.", vote: "ceramics" },
+  { name: "Jonah", amount: 10, visibility: "named", vote: "cooking" },
+  { name: "", amount: 8, visibility: "anonymous", message: "Thanks for always having time for the new starters." },
+  { name: "Ravi", amount: 15, visibility: "named", message: "Best desk neighbour I've ever had. Keep in touch!", vote: "coffee" },
+  { name: "Grace", amount: 10, visibility: "named", message: "Wishing you the happiest next chapter, Priya." },
+  { name: "Leo", amount: 8, visibility: "amount_hidden", vote: "ceramics" },
+];
+
+async function insertSeeds(potId: string) {
+  const db = await admin();
+  const now = Date.now();
+  for (const [i, s] of SEEDS.entries()) {
+    const { data: c } = await db
+      .from("contributions")
+      .insert({ pot_id: potId, display_name: s.name, visibility: s.visibility, amount: s.amount, status: "authorized", is_seeded: true, created_at: new Date(now - (SEEDS.length - i) * 60_000).toISOString() })
+      .select("id")
+      .single();
+    if (!c) continue;
+    if (s.message) await db.from("card_signatures").insert({ pot_id: potId, contribution_id: c.id, name: s.name || "Someone", message: s.message });
+    if (s.vote) await db.from("category_votes").insert({ pot_id: potId, contribution_id: c.id, category: s.vote });
+  }
+  const total = SEEDS.reduce((x, s) => x + s.amount, 0);
+  await logEvent(potId, "demo_seeded", `I've added ${SEEDS.length} demo chip-ins, £${total} in all, so you can watch me work. They're demo holds, not real PayPal holds, so they're never charged.`);
+}
+
+async function requireDemo(slug: string, token: string) {
+  const p = await requireAdmin(slug, token);
+  const db = await admin();
+  const { data: pot } = await db.from("pots").select("*").eq("id", p.id).single();
+  if (!pot?.is_demo) throw new Error("This only works on the demo pot.");
+  return pot;
+}
+
+/**
+ * Creates the Priya demo pot (no token) or tops up seeds on an existing demo pot (its admin token).
+ * Seeded rows are is_seeded and carry no authorization, so capture and void never send them to PayPal.
+ */
+export const seedDemoPot = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80).optional(), adminToken: z.string().max(100).optional() }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    if (data.slug && data.adminToken) {
+      const pot = await requireDemo(data.slug, data.adminToken);
+      const { count } = await db.from("contributions").select("id", { count: "exact", head: true }).eq("pot_id", pot.id).eq("is_seeded", true);
+      if (!count) await insertSeeds(pot.id);
+      return { slug: pot.slug, adminToken: pot.admin_token };
+    }
+    const since = new Date(Date.now() - 3600_000).toISOString();
+    const { count: recent } = await db.from("pots").select("id", { count: "exact", head: true }).eq("is_demo", true).gte("created_at", since);
+    if ((recent ?? 0) >= 20) throw new Error("Lots of demo pots were started just now. Try again in a little while.");
+    const slug = makeSlug("priya-demo");
+    const admin_token = randomToken(24);
+    const created = new Date();
+    const { data: pot, error } = await db
+      .from("pots")
+      .insert({
+        slug, admin_token, is_demo: true, demo_speed: true, demo_factor: DEMO_FACTOR,
+        recipient_name: "Priya", occasion: "leaving", closeness: "colleague",
+        likes: ["cooking", "ceramics", "coffee"], dislikes: ["scented things"],
+        mode: "pot_first", target_amount: 120, currency: DEFAULT_CURRENCY, expected_count: 12, vote_window: "1h",
+        // Two days on the pot's clock: 48 minutes at demo speed, with the nudge due at 24.
+        deadline_at: new Date(created.getTime() + 2 * 86400_000).toISOString(), created_at: created.toISOString(),
+        organiser_name: "Alex", organiser_paypal_email: "demo-organiser@example.com",
+      })
+      .select("id, slug, admin_token")
+      .single();
+    if (error || !pot) {
+      console.error(error);
+      throw new Error("We couldn't start the demo pot just now.");
+    }
+    await logEvent(pot.id, "pot_created", "Alex just set up a kitty for Priya's leaving do. I'm on it.");
+    await logEvent(pot.id, "profile_learned", "Noted: Priya loves cooking, ceramics and coffee. I'll steer clear of scented things.");
+    await insertSeeds(pot.id);
+    const { runAgent } = await import("./agent.server");
+    await runAgent(pot.id, { kind: "manual" });
+    return { slug: pot.slug, adminToken: pot.admin_token };
+  });
+
+/** Releases any real sandbox holds on the demo pot, wipes it and seeds it again from scratch. */
+export const resetDemoPot = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100) }).parse(d))
+  .handler(async ({ data }) => {
+    const pot = await requireDemo(data.slug, data.adminToken);
+    const db = await admin();
+    const { voidAuthorization, refundCapture } = await pp();
+    const { data: rows } = await db.from("contributions").select("id, status, authorization_id, capture_id, is_seeded").eq("pot_id", pot.id);
+    let released = 0;
+    for (const c of rows ?? []) {
+      if (isDemoHold(c)) continue; // never sent to PayPal
+      try {
+        if (c.status === "captured" && c.capture_id) { await refundCapture(c.capture_id, `ref-${c.capture_id}-reset`); released++; }
+        else if (["authorized", "reauthorized"].includes(c.status) && c.authorization_id) { await voidAuthorization(c.authorization_id, `void-${c.id}`); released++; }
+      } catch (e) { console.error("reset release failed", c.id, e); }
+    }
+    for (const t of ["final_votes", "decisions", "payouts", "reminders", "card_signatures", "category_votes", "candidates", "agent_events"] as const) {
+      await db.from(t).delete().eq("pot_id", pot.id);
+    }
+    await db.from("contributions").delete().eq("pot_id", pot.id);
+    const created = new Date();
+    await db.from("pots").update({
+      status: "collecting", created_at: created.toISOString(), deadline_at: new Date(created.getTime() + 2 * 86400_000).toISOString(),
+      demo_speed: true, closed_at: null, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null,
+      last_search_band: 0, last_top_categories: [], agent_lock_at: null, agent_pending: false, agent_working: null,
+      tick_lock_at: null, reminder_drafted_at: null,
+    }).eq("id", pot.id);
+    await logEvent(pot.id, "demo_reset", `Fresh start.${released ? ` I released ${released} real sandbox hold${released === 1 ? "" : "s"} first, and nobody was charged.` : ""}`);
+    await insertSeeds(pot.id);
+    const { runAgent } = await import("./agent.server");
+    await runAgent(pot.id, { kind: "manual" });
+    return { released };
+  });
+
+// ---------- reminder nudge ----------
+export const approveReminder = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100), reminderId: z.string().uuid(), text: z.string().trim().min(5).max(400) }).parse(d))
+  .handler(async ({ data }) => {
+    const p = await requireAdmin(data.slug, data.adminToken);
+    const db = await admin();
+    const { data: r } = await db.from("reminders").update({ draft_text: data.text, approved_at: new Date().toISOString() }).eq("id", data.reminderId).eq("pot_id", p.id).select("id").maybeSingle();
+    if (!r) throw new Error("We couldn't find that nudge.");
+    return { ok: true };
+  });
+
+// ---------- fixed split: read a product from its link ----------
+export const lookupProductUrl = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ url: z.string().trim().url().max(1000) }).parse(d))
+  .handler(async ({ data }) => {
+    const { lookupByUrl } = await import("./channel3.server");
+    const r = await lookupByUrl(data.url);
+    if (r.status !== "ok" || !r.product) return { ok: false as const, reason: r.status === "not_configured" ? "not_configured" : "not_found" };
+    const p = r.product;
+    let host: string | null = null;
+    try { host = new URL(data.url).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
+    const offer = p.offers.find((o) => o.domain === host) ?? p.offers.filter((o) => o.inStock).sort((a, b) => a.price - b.price)[0] ?? p.offers[0];
+    if (!offer) return { ok: false as const, reason: "not_found" };
+    return { ok: true as const, product: { title: p.title, image_url: p.image, retailer: offer.domain, price: offer.price, offer_url: offer.url, channel3_product_id: p.id } };
   });

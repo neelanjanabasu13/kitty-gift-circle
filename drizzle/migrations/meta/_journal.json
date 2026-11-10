@@ -22,6 +22,13 @@
       "when": 1794315029122,
       "tag": "0002_closing_and_money",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794316370244,
+      "tag": "0003_demo_world",
+      "breakpoints": true
     }
   ]
 }
