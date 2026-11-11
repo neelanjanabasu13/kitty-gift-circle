@@ -43,7 +43,7 @@
   --color-kraft: var(--kraft);
   --color-kraft-deep: var(--kraft-deep);
   --color-kraft-soft: var(--kraft-soft);
-  --color-ribbon: var(--ribbon);
+  --color-signal: var(--signal);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -67,7 +67,7 @@
 
 :root {
   --radius: 14px;
-  /* Warm paper, ink, kraft and one ribbon red */
+  /* Warm paper, ink, kraft and one PayPal blue accent */
   --background: #FAF7F2;
   --foreground: #141210;
   --card: #FFFFFF;
@@ -84,15 +84,15 @@
   --accent-foreground: #141210;
   --border: #E8E2D9;
   --input: #E8E2D9;
-  --ring: #E5484D;
-  --destructive: #C8323A;
+  --ring: #0070E0;
+  --destructive: #2E2925; /* dark ink, never red */
   --destructive-foreground: #FFFFFF;
 
-  /* Kraft gift box and ribbon */
+  /* Kraft gift box; the bow uses the PayPal blue gradient in the mascot */
   --kraft: #C9A27E;
   --kraft-deep: #7D5A38; /* text on paper: 5.8:1, AA */
   --kraft-soft: #F3EDE4;
-  --ribbon: #E5484D;
+  --signal: #0070E0; /* sparse accent: live dot, focus, countdown */
 
   /* Money states */
   --held: #0070E0;
@@ -112,7 +112,7 @@
   --chart-1: var(--kraft);
   --chart-2: var(--held);
   --chart-3: var(--paid);
-  --chart-4: var(--ribbon);
+  --chart-4: var(--held-ink);
   --chart-5: var(--kraft-deep);
   --sidebar: var(--background);
   --sidebar-foreground: var(--foreground);
@@ -151,7 +151,7 @@
     line-height: 1;
   }
   :focus-visible {
-    outline: 2px solid var(--ribbon);
+    outline: 2px solid var(--signal);
     outline-offset: 2px;
   }
 }

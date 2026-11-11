@@ -2,7 +2,7 @@ import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/Stat
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Lock } from "lucide-react";
+import { Lock, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Chip, Segmented } from "@/components/kitty/Chip";
@@ -198,7 +198,7 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
         </div>
         <AnimatePresence>
           {error && (
-            <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-[12px] border border-destructive/30 bg-card p-3 text-[14px] text-destructive" role="alert">{error}</motion.p>
+            <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-[12px] border border-destructive/30 bg-card p-3 flex items-start gap-2 text-[14px] text-destructive" role="alert"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{error}</motion.p>
           )}
         </AnimatePresence>
         {!valid && <p className="text-[13px] text-muted-foreground">{value < 1 ? "Pick an amount to continue." : "Add your name, or choose Anonymous."}</p>}

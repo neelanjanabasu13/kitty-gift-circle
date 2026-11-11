@@ -75,11 +75,11 @@ export function VetoCountdown({ title, price, currency, at, why, secondsLeft, to
       <div className="relative mx-auto size-40" role="timer" aria-label={`${fmtLeft(secondsLeft)} left`}>
         <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden="true">
           <circle cx="60" cy="60" r={r} fill="none" stroke="var(--color-muted)" strokeWidth="6" />
-          <circle cx="60" cy="60" r={r} fill="none" stroke="var(--ribbon)" strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: "stroke-dashoffset 1s linear" }} />
+          <circle cx="60" cy="60" r={r} fill="none" stroke="var(--signal)" strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} style={{ transition: "stroke-dashoffset 1s linear" }} />
         </svg>
         <span className="absolute inset-0 grid place-items-center font-display text-[40px] tabular">{fmtLeft(secondsLeft)}</span>
       </div>
-      {why && <p className="mx-auto flex max-w-md justify-center gap-1.5 font-display text-[20px] italic"><Sparkles className="mt-1.5 size-4 shrink-0 text-ribbon" />{why}</p>}
+      {why && <p className="mx-auto flex max-w-md justify-center gap-1.5 font-display text-[20px] italic"><Sparkles className="mt-1.5 size-4 shrink-0 text-signal" />{why}</p>}
       {organiser ? (
         <>
           <div className="mx-auto grid max-w-sm grid-cols-2 gap-2">

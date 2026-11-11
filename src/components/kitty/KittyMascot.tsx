@@ -1,178 +1,184 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, lazy, Suspense } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { lazy, Suspense } from "react";
 const Confetti = lazy(() => import("./MascotConfetti"));
 
-// Kitty: a simple geometric cat living in a kraft gift box with a red ribbon. Inline SVG, motion/react only.
+// Kitty the cat butler: a sleek black ink silhouette with white negative space, almond half-lidded eyes,
+// a bow tie and one white glove, standing behind a kraft gift box tied with a PayPal blue ribbon.
+// Inline SVG, motion/react only. Eyes are thin path shapes (no circles or ellipses).
 
 export type MascotState = "idle" | "chipIn" | "searching" | "ranking" | "vote" | "veto" | "buying" | "done" | "cancelled";
 
-const SPRING = { type: "spring" as const, stiffness: 300, damping: 20 };
-const SNAP = { type: "spring" as const, stiffness: 520, damping: 11 };
+const SPRING = { type: "spring" as const, stiffness: 170, damping: 18, mass: 0.9 };
+const LIMB = { type: "spring" as const, stiffness: 120, damping: 14, mass: 1 }; // softer, so limbs follow through
+const SNAP = { type: "spring" as const, stiffness: 620, damping: 12 };
+const SILK = [0.65, 0, 0.35, 1] as const; // dancer-like ease in-out
 const INK = "var(--foreground)";
 const KRAFT = "var(--kraft)";
 const KRAFT_DEEP = "var(--kraft-deep)";
-const RIBBON = "var(--ribbon)";
 const PAPER = "var(--card)";
+export const PAYPAL_BLUES = ["#003087", "#0070E0", "#009CDE"];
+
+// Right arm pose: shoulder rotation and elbow rotation, in degrees.
+const ARM: Record<MascotState, { a: number; b: number }> = {
+  idle: { a: 0, b: 0 },
+  chipIn: { a: -8, b: -6 },
+  searching: { a: -100, b: -108 },
+  ranking: { a: -40, b: -20 },
+  vote: { a: -120, b: 30 },
+  veto: { a: -22, b: -10 },
+  buying: { a: -55, b: 45 },
+  done: { a: 20, b: -40 },
+  cancelled: { a: -130, b: 0 },
+};
+
+const TAIL = {
+  s1: "M66 160 C42 158 30 142 38 126 C46 110 34 94 20 92",
+  s2: "M66 160 C44 164 24 150 32 132 C40 114 28 100 14 104",
+  s3: "M66 160 C38 152 42 132 46 120 C52 102 42 88 30 80",
+  low: "M66 160 C46 166 30 164 22 156 C14 148 16 140 22 136",
+  high: "M66 160 C40 150 34 120 44 98 C52 80 46 66 34 60",
+};
 
 export function KittyMascot({ state = "idle", fill = 0, size = 72, className, label, wink: forceWink = false }: { state?: MascotState; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean }) {
   const reduce = !!useReducedMotion();
-  const clip = useId().replace(/:/g, "");
-  const blinking = useBlink(!reduce && state !== "buying");
+  const uid = useId().replace(/:/g, "");
+  const grad = `rb-${uid}`;
   const s = state;
-
-  const catY = s === "searching" ? -16 : s === "buying" ? 70 : s === "done" ? 26 : s === "vote" ? -6 : 0;
-  const closed = s === "buying" || s === "done";
-  const wink = s === "done" || forceWink;
-  const look = s === "veto" ? { x: 2.5, y: 2.5 } : { x: 0, y: 0 };
+  const blinking = useBlink(!reduce && s !== "buying");
   const coins = Math.max(0, Math.min(5, Math.round(Math.max(0, Math.min(1, fill)) * 5)));
-  const loop = (v: number[], d: number, delay = 0) => (reduce ? { duration: 0 } : { duration: d, repeat: Infinity, ease: "easeInOut" as const, delay });
+  const loop = (d: number, delay = 0) => (reduce ? { duration: 0 } : { duration: d, repeat: Infinity, ease: SILK, delay });
+  const R = (live: any, still: any): any => (reduce ? still : live); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const t = (tr: object) => (reduce ? { duration: 0 } : tr);
+
+  const lidClosed = blinking || forceWink || s === "done";
+  // Pupil glance: searching glides left and right, veto looks sideways at the viewer.
+  const glance = s === "veto" ? 2.4 : s === "ranking" ? 1.6 : 0;
+  const arm = ARM[s];
+  const tailD = s === "idle" || s === "chipIn" ? R([TAIL.s1, TAIL.s2, TAIL.s3, TAIL.s1], TAIL.s1)
+    : s === "done" || s === "buying" || s === "vote" ? TAIL.high
+    : s === "cancelled" ? TAIL.low
+    : R([TAIL.s3, TAIL.s1, TAIL.s3], TAIL.s3);
+  const ribbonOn = s !== "cancelled";
 
   return (
     <span className={className} style={{ display: "inline-block", width: size, height: size }} role="img" aria-label={label ?? `Kitty, ${describe(s)}`}>
       <AnimatePresence mode="wait" initial={false}>
-        <motion.svg
-          key={reduce ? s : "live"}
-          viewBox="0 0 200 200"
-          width={size}
-          height={size}
-          initial={reduce ? { opacity: 0 } : false}
-          animate={{ opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : {}}
-          transition={{ duration: 0.25 }}
-          style={{ overflow: "visible" }}
-        >
+        <motion.svg key={reduce ? s : "live"} viewBox="0 0 200 200" width={size} height={size}
+          initial={reduce ? { opacity: 0 } : false} animate={{ opacity: 1 }} exit={reduce ? { opacity: 0 } : {}}
+          transition={{ duration: 0.25 }} style={{ overflow: "visible" }}>
           <defs>
-            <clipPath id={`c-${clip}`}>
-              <rect x="0" y="-40" width="200" height="218" />
-            </clipPath>
+            <linearGradient id={grad} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={PAYPAL_BLUES[0]} />
+              <stop offset="55%" stopColor={PAYPAL_BLUES[1]} />
+              <stop offset="100%" stopColor={PAYPAL_BLUES[2]} />
+            </linearGradient>
           </defs>
 
-          {/* Shuffling product cards (ranking) */}
-          {s === "ranking" && !reduce && [0, 1, 2].map((i) => (
-            <motion.rect
-              key={i}
-              y={18}
-              width={22}
-              height={28}
-              rx={4}
-              fill={PAPER}
-              stroke={INK}
-              strokeWidth={2}
-              initial={{ x: 50 + i * 38 }}
-              animate={{ x: [50 + i * 38, 50 + ((i + 1) % 3) * 38, 50 + ((i + 2) % 3) * 38, 50 + i * 38] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: [0.22, 1, 0.36, 1], delay: i * 0.04 }}
-            />
-          ))}
-          {s === "ranking" && reduce && [0, 1, 2].map((i) => <rect key={i} x={50 + i * 38} y={18} width={22} height={28} rx={4} fill={PAPER} stroke={INK} strokeWidth={2} />)}
+          {/* Tail leads the motion: it moves first, limbs follow a beat later. */}
+          <motion.path d={TAIL.s1} fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round"
+            animate={{ d: tailD }}
+            transition={Array.isArray(tailD) ? { duration: 5.5, repeat: Infinity, ease: SILK } : t({ duration: 0.9, ease: SILK })} />
 
-          {/* Flaps (behind the cat when open) */}
-          <motion.rect x={40} y={56} width={9} height={54} rx={3} fill={KRAFT} stroke={INK} strokeWidth={2}
-            style={{ originX: "40px", originY: "110px", transformBox: "view-box" }}
-            animate={{ rotate: closed ? (s === "done" ? 60 : 90) : -28 }} transition={closed ? SPRING : SPRING} />
-          <motion.rect x={151} y={56} width={9} height={54} rx={3} fill={KRAFT} stroke={INK} strokeWidth={2}
-            style={{ originX: "160px", originY: "110px", transformBox: "view-box" }}
-            animate={{ rotate: closed ? (s === "done" ? -60 : -90) : 28 }} transition={SPRING} />
-
-          {/* Coins inside, peeking over the rim as the pot fills */}
-          {Array.from({ length: coins }).map((_, i) => (
-            <motion.circle key={i} cx={58 + i * 21} cy={110} r={7} fill={KRAFT_DEEP} stroke={INK} strokeWidth={2}
-              initial={{ y: 8 }} animate={{ y: s === "cancelled" ? -90 - i * 8 : 0, opacity: s === "cancelled" ? 0 : 1 }}
-              transition={s === "cancelled" ? { duration: 1.6, delay: i * 0.12, ease: "easeOut" } : SPRING} />
+          {/* Three little cards (ranking), arranged by the glove */}
+          {s === "ranking" && [0, 1, 2].map((i) => (
+            <motion.rect key={i} y={88} width={16} height={22} rx={2.5} fill={PAPER} stroke={INK} strokeWidth={1.8}
+              initial={{ x: 128 + i * 18, opacity: 0 }}
+              animate={R({ x: [128 + i * 18, 128 + ((i + 1) % 3) * 18, 128 + ((i + 2) % 3) * 18, 128 + i * 18], opacity: 1, rotate: [-4 + i * 4, 0, 4 - i * 4, -4 + i * 4] }, { x: 128 + i * 18, opacity: 1, rotate: -4 + i * 4 })}
+              transition={reduce ? { duration: 0 } : { duration: 3.2, repeat: Infinity, ease: SILK, delay: i * 0.08 }} />
           ))}
 
-          {/* The cat */}
-          <g clipPath={`url(#c-${clip})`}>
-            <motion.g animate={{ y: catY }} transition={s === "buying" ? { ...SPRING, stiffness: 260 } : SPRING}>
-              <motion.g
-                style={{ originX: "100px", originY: "120px", transformBox: "view-box" }}
-                animate={{ rotate: s === "ranking" ? 9 : s === "veto" ? -4 : 0, scaleY: s === "idle" && !reduce ? [1, 1.025, 1] : 1 }}
-                transition={s === "idle" && !reduce ? { scaleY: { duration: 3.2, repeat: Infinity, ease: "easeInOut" }, rotate: SPRING } : SPRING}
-              >
-                {/* body */}
-                <path d="M66 150 C66 118 80 104 100 104 C120 104 134 118 134 150 Z" fill={PAPER} stroke={INK} strokeWidth={2} />
-                {/* ears */}
-                <motion.path d="M72 74 L76 38 L98 60 Z" fill={PAPER} stroke={INK} strokeWidth={2} strokeLinejoin="round"
-                  style={{ originX: "86px", originY: "66px", transformBox: "view-box" }}
-                  animate={{ rotate: s === "chipIn" ? -8 : s === "cancelled" ? 12 : 0, scaleY: s === "chipIn" ? 1.12 : 1 }} transition={SPRING} />
-                <motion.path d="M128 74 L124 38 L102 60 Z" fill={PAPER} stroke={INK} strokeWidth={2} strokeLinejoin="round"
-                  style={{ originX: "114px", originY: "66px", transformBox: "view-box" }}
-                  animate={{ rotate: s === "chipIn" ? 8 : s === "cancelled" ? -12 : 0, scaleY: s === "chipIn" ? 1.12 : 1 }} transition={SPRING} />
-                <path d="M79 50 L82 62 L90 58 Z M121 50 L118 62 L110 58 Z" fill={RIBBON} opacity={0.35} />
-                {/* head */}
-                <ellipse cx={100} cy={84} rx={36} ry={31} fill={PAPER} stroke={INK} strokeWidth={2} />
-                {/* eyes */}
-                <Eye cx={86} cy={82} closed={blinking || false} look={look} scan={s === "searching" && !reduce} />
-                <Eye cx={114} cy={82} closed={blinking || wink} look={look} scan={s === "searching" && !reduce} />
-                {/* nose, mouth, whiskers */}
-                <path d="M97 94 L103 94 L100 97.5 Z" fill={RIBBON} />
-                <path d="M100 97.5 C100 101 96 102 94 100 M100 97.5 C100 101 104 102 106 100" fill="none" stroke={INK} strokeWidth={1.6} strokeLinecap="round" />
-                <path d="M70 92 L58 89 M70 97 L58 99 M130 92 L142 89 M130 97 L142 99" stroke={INK} strokeWidth={1.4} strokeLinecap="round" />
-              </motion.g>
+          {/* The butler */}
+          <motion.g animate={{ y: s === "buying" ? 2 : 0 }} transition={SPRING}>
+            {/* torso, breathing */}
+            <motion.g style={{ originX: "98px", originY: "132px", transformBox: "view-box" }}
+              animate={{ scaleY: s === "idle" ? R([1, 1.018, 1], 1) : s === "done" ? 0.94 : 1 }}
+              transition={s === "idle" ? loop(4.2) : SPRING}>
+              <path d="M86 68 C78 84 74 108 76 134 L120 134 C122 108 116 84 106 68 Z" fill={INK} />
+              <path d="M90 71 L97 102 L104 71 Z" fill={PAPER} />
+              {/* bow tie */}
+              <path d="M91 75 L97 78.5 L91 82 Z M103 75 L97 78.5 L103 82 Z M95.8 77.2 H98.2 V79.8 H95.8 Z" fill={INK} />
+              {/* left arm, paw resting on the box */}
+              <motion.path d="M84 86 C78 100 76 114 80 128" fill="none" stroke={INK} strokeWidth={7} strokeLinecap="round"
+                animate={{ d: s === "done" ? "M84 86 C82 98 88 106 96 104" : "M84 86 C78 100 76 114 80 128" }} transition={t(LIMB)} />
             </motion.g>
-          </g>
 
-          {/* Tail flicking over the box edge */}
-          <motion.path
-            d="M156 150 C176 146 182 128 172 116 C168 111 162 114 166 120"
-            fill="none" stroke={INK} strokeWidth={6} strokeLinecap="round"
-            style={{ originX: "156px", originY: "150px", transformBox: "view-box" }}
-            animate={{ rotate: s === "buying" || s === "done" ? -40 : reduce ? 0 : [0, -12, 0, 6, 0], opacity: s === "buying" ? 0 : 1 }}
-            transition={s === "buying" || s === "done" ? SPRING : loop([0], 3.6)}
-          />
-          <motion.path
-            d="M156 150 C176 146 182 128 172 116 C168 111 162 114 166 120"
-            fill="none" stroke={PAPER} strokeWidth={2.4} strokeLinecap="round"
-            style={{ originX: "156px", originY: "150px", transformBox: "view-box" }}
-            animate={{ rotate: s === "buying" || s === "done" ? -40 : reduce ? 0 : [0, -12, 0, 6, 0], opacity: s === "buying" ? 0 : 1 }}
-            transition={s === "buying" || s === "done" ? SPRING : loop([0], 3.6)}
-          />
-
-          {/* Box front */}
-          <rect x={40} y={110} width={120} height={70} rx={6} fill={KRAFT} stroke={INK} strokeWidth={2} />
-          <path d="M40 122 L160 122" stroke={KRAFT_DEEP} strokeWidth={1.5} opacity={0.6} />
-          {/* Ribbon band */}
-          <motion.rect x={93} y={110} width={14} height={70} fill={RIBBON} stroke={INK} strokeWidth={2}
-            style={{ originX: "100px", originY: "110px", transformBox: "view-box" }}
-            animate={{ scaleY: s === "cancelled" ? 0 : 1, opacity: s === "cancelled" ? 0 : 1 }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }} />
-
-          {/* Paws on the rim (and props) */}
-          <motion.g animate={{ opacity: s === "buying" ? 0 : 1, y: s === "done" ? 4 : 0 }} transition={SPRING}>
-            <ellipse cx={78} cy={111} rx={10} ry={6} fill={PAPER} stroke={INK} strokeWidth={2} />
-            <motion.g
-              style={{ originX: "122px", originY: "111px", transformBox: "view-box" }}
+            {/* head */}
+            <motion.g style={{ originX: "96px", originY: "70px", transformBox: "view-box" }}
               animate={
-                s === "cancelled" && !reduce ? { rotate: [0, -30, -10, -30, 0], y: -24 }
-                : s === "vote" ? { y: -34, rotate: 0 }
-                : s === "veto" ? { y: -8, x: 18, rotate: 0 }
-                : s === "ranking" && !reduce ? { y: [0, -6, 0], rotate: 0 }
-                : s === "searching" ? { y: -20, rotate: 0 }
-                : { y: 0, x: 0, rotate: 0 }
+                s === "chipIn" ? R({ rotate: [0, 9, 0], y: [0, 3, 0] }, { rotate: 6, y: 2 })
+                : s === "done" ? R({ y: [0, 10, 10, 0], rotate: [0, 6, 6, 0] }, { y: 10, rotate: 6 })
+                : { rotate: s === "ranking" ? 9 : s === "veto" ? -5 : s === "searching" ? -3 : s === "cancelled" ? -4 : 0, y: s === "idle" ? R([0, -0.8, 0], 0) : 0 }
               }
-              transition={s === "cancelled" ? { duration: 1.4, repeat: reduce ? 0 : Infinity } : s === "ranking" ? { duration: 0.5, repeat: Infinity, repeatDelay: 0.3 } : SPRING}
-            >
-              <ellipse cx={122} cy={111} rx={10} ry={6} fill={PAPER} stroke={INK} strokeWidth={2} />
-              {s === "vote" && (
-                <g>
-                  <rect x={112} y={70} width={26} height={32} rx={3} fill={PAPER} stroke={INK} strokeWidth={2} />
-                  <path d="M118 86 L124 92 L133 79" fill="none" stroke={RIBBON} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-                </g>
-              )}
-              {s === "searching" && (
-                <g>
-                  <circle cx={140} cy={92} r={11} fill={PAPER} fillOpacity={0.6} stroke={INK} strokeWidth={2.5} />
-                  <path d="M132 100 L124 108" stroke={INK} strokeWidth={4} strokeLinecap="round" />
-                </g>
-              )}
+              transition={s === "chipIn" ? loop(1.7, 0.35) : s === "done" ? loop(2.8, 0.15) : s === "idle" ? loop(4.2) : { ...SPRING, delay: 0.06 }}>
+              <path d="M76 56 C74 46 76 36 80 30 L82 14 L92 27 C94 26.5 98 26.5 100 27 L110 14 L112 30 C116 36 118 46 116 56 C114 66 106 72 96 72 C86 72 78 66 76 56 Z" fill={INK} />
+              {/* inner ears */}
+              <path d="M83.5 20 L84.5 28 L89 26 Z M108.5 20 L107.5 28 L103 26 Z" fill={PAPER} opacity={0.22} />
+              {/* almond eyes: white negative space with ink slit pupils, half-lidded */}
+              <Eye d="M81 46.5 C84 42.6 89 42.6 92 46 C89 48.6 84 48.8 81 46.5 Z" cx={86.5} closed={lidClosed} glance={glance} scan={s === "searching" && !reduce} />
+              <Eye d="M100 46 C103 42.6 108 42.6 111 46.5 C108 48.8 103 48.6 100 46 Z" cx={105.5} closed={blinking} glance={glance} scan={s === "searching" && !reduce} />
+              {/* brows: the right one lifts for veto and searching */}
+              <path d="M81 40.5 C84 39 88 39 92 40.6" fill="none" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" opacity={0.85} />
+              <motion.path d="M100 40.6 C104 39 108 39 111 40.5" fill="none" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" opacity={0.85}
+                style={{ originX: "105px", originY: "40px", transformBox: "view-box" }}
+                animate={{ y: s === "veto" || s === "searching" ? -3 : 0, rotate: s === "veto" ? -10 : 0 }} transition={SPRING} />
+              {/* nose and whiskers */}
+              <path d="M94 55 L98 55 L96 57.4 Z" fill={PAPER} />
+              <path d="M90 58 L79 56.5 M90 60.5 L80 61.5 M102 58 L113 56.5 M102 60.5 L112 61.5" stroke={PAPER} strokeWidth={0.8} strokeLinecap="round" opacity={0.7} />
+              {/* monocle on the right eye while searching */}
+              {s === "searching" && <path d="M105.5 38 A8.5 8.5 0 1 1 105.4 38 Z M113 52 C116 60 114 68 110 74" fill="none" stroke={PAPER} strokeWidth={1.4} />}
+            </motion.g>
+
+            {/* right arm: shoulder then elbow, softer spring so it overlaps the head move */}
+            <motion.g style={{ originX: "112px", originY: "86px", transformBox: "view-box" }}
+              animate={{ rotate: arm.a }} transition={{ ...LIMB, delay: reduce ? 0 : 0.08 }}>
+              <path d="M112 86 L124 106" stroke={INK} strokeWidth={7} strokeLinecap="round" />
+              <motion.g style={{ originX: "124px", originY: "106px", transformBox: "view-box" }}
+                animate={
+                  s === "cancelled" ? { rotate: R([-25, 20, -25], 0) }
+                  : s === "ranking" ? { rotate: R([-30, -6, -30], -20) }
+                  : s === "veto" ? { rotate: arm.b, y: R([0, -2.5, 0], 0) }
+                  : { rotate: arm.b }
+                }
+                transition={s === "cancelled" ? loop(1.3) : s === "ranking" ? loop(3.2) : s === "veto" ? { y: loop(1.6), rotate: { ...LIMB, delay: 0.16 } } : { ...LIMB, delay: reduce ? 0 : 0.16 }}>
+                <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
+                {/* white glove */}
+                <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+                <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
+                {/* ballot card presented with a flourish */}
+                {s === "vote" && (
+                  <motion.g initial={{ opacity: 0, rotate: -30 }} animate={{ opacity: 1, rotate: 0 }} transition={t(SNAP)}
+                    style={{ originX: "131px", originY: "122px", transformBox: "view-box" }}>
+                    <path d="M126 96 H146 V120 H126 Z" fill={PAPER} stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
+                    <path d="M130.5 108 L135 112.5 L142 103" fill="none" stroke={PAYPAL_BLUES[1]} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
+                  </motion.g>
+                )}
+              </motion.g>
             </motion.g>
           </motion.g>
 
-          {/* Veto button */}
+          {/* Coins inside, peeking over the rim as the pot fills; they float out when cancelled */}
+          {Array.from({ length: coins }).map((_, i) => (
+            <motion.circle key={i} cx={74 + i * 14} cy={130} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.6}
+              initial={{ y: 8 }} animate={{ y: s === "cancelled" ? R(-80 - i * 10, -18) : 0, opacity: s === "cancelled" ? R(0, 0.6) : 1 }}
+              transition={s === "cancelled" ? t({ duration: 2, delay: i * 0.15, ease: SILK }) : SPRING} />
+          ))}
+
+          {/* Box */}
+          <rect x={58} y={128} width={102} height={54} rx={5} fill={KRAFT} stroke={INK} strokeWidth={2} />
+          <path d="M58 138 L160 138" stroke={KRAFT_DEEP} strokeWidth={1.2} opacity={0.5} />
+          <motion.rect x={102} y={128} width={14} height={54} fill={`url(#${grad})`}
+            style={{ originX: "109px", originY: "128px", transformBox: "view-box" }}
+            initial={false}
+            animate={{ scaleY: ribbonOn ? (s === "buying" ? R([0, 1], 1) : 1) : 0, opacity: ribbonOn ? 1 : 0 }}
+            transition={s === "buying" ? t({ duration: 0.7, ease: SILK, repeat: Infinity, repeatDelay: 2.3 }) : t({ duration: 0.9, ease: SILK })} />
+
+          {/* Bell on the lid (veto) */}
           <AnimatePresence>
             {s === "veto" && (
               <motion.g initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={SPRING}>
-                <rect x={128} y={112} width={30} height={10} rx={3} fill={PAPER} stroke={INK} strokeWidth={2} />
-                <motion.ellipse cx={143} cy={112} rx={9} ry={5} fill={RIBBON} stroke={INK} strokeWidth={2} animate={reduce ? {} : { y: [0, 1.5, 0] }} transition={loop([0], 1.4)} />
+                <path d="M136 128 C136 120 141 116 146 116 C151 116 156 120 156 128 Z" fill={INK} />
+                <path d="M133 128 H159" stroke={INK} strokeWidth={2.2} strokeLinecap="round" />
+                <path d="M146 113 V116" stroke={INK} strokeWidth={2} strokeLinecap="round" />
               </motion.g>
             )}
           </AnimatePresence>
@@ -180,47 +186,51 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
           {/* Coin dropping in (chip-in) */}
           <AnimatePresence>
             {s === "chipIn" && (
-              <motion.g key="coin" initial={{ y: -120, opacity: 0 }} animate={{ y: reduce ? 0 : [-120, 0, -10, 0], opacity: [0, 1, 1, 0] }} transition={{ duration: 1.1, times: [0, 0.55, 0.75, 1], ease: "easeOut", repeat: reduce ? 0 : Infinity, repeatDelay: 0.6 }}>
-                <circle cx={60} cy={104} r={9} fill={KRAFT_DEEP} stroke={INK} strokeWidth={2} />
-                <path d="M60 99 L60 109" stroke={INK} strokeWidth={1.6} strokeLinecap="round" />
+              <motion.g key="coin" initial={{ y: -90, opacity: 0 }}
+                animate={R({ y: [-90, 0, -6, 0], opacity: [0, 1, 1, 0] }, { y: 0, opacity: 1 })}
+                transition={reduce ? { duration: 0 } : { duration: 1.2, times: [0, 0.55, 0.75, 1], ease: "easeOut", repeat: Infinity, repeatDelay: 0.5 }}>
+                <circle cx={84} cy={122} r={7} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.8} />
+                <path d="M84 118 L84 126" stroke={INK} strokeWidth={1.4} strokeLinecap="round" />
               </motion.g>
             )}
           </AnimatePresence>
 
-          {/* Bow ties itself when buying, bounces when done */}
-          <motion.g
-            style={{ originX: "100px", originY: "112px", transformBox: "view-box" }}
-            initial={false}
-            animate={{
-              scale: s === "cancelled" ? 0 : closed ? 1.25 : 0.85,
-              rotate: s === "cancelled" ? 40 : 0,
-              y: s === "done" && !reduce ? [0, -6, 0] : 0,
-            }}
-            transition={s === "done" && !reduce ? { y: { duration: 0.9, repeat: Infinity, repeatDelay: 1.2 }, scale: SNAP } : closed ? SNAP : SPRING}
-          >
-            <path d="M100 112 C84 96 74 104 80 114 C84 120 94 116 100 112 Z" fill={RIBBON} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-            <path d="M100 112 C116 96 126 104 120 114 C116 120 106 116 100 112 Z" fill={RIBBON} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-            <circle cx={100} cy={112} r={5} fill={RIBBON} stroke={INK} strokeWidth={2} />
+          {/* Bow: snaps tight when buying, bounces when done, unties when cancelled */}
+          <motion.g style={{ originX: "109px", originY: "128px", transformBox: "view-box" }} initial={false}
+            animate={
+              s === "cancelled" ? { scale: R(0, 0.6), rotate: 50, opacity: R(0, 0.4) }
+              : s === "buying" ? { scale: R([0, 0, 1.25, 1], 1), rotate: 0, opacity: 1 }
+              : s === "done" ? { scale: 1.1, y: R([0, -7, 0], 0), rotate: 0, opacity: 1 }
+              : { scale: 1, y: 0, rotate: 0, opacity: 1 }
+            }
+            transition={
+              s === "buying" ? t({ duration: 3, times: [0, 0.24, 0.3, 0.36], ease: "easeOut", repeat: Infinity })
+              : s === "done" ? { y: loop(1, 0.4), scale: SNAP }
+              : t({ duration: 0.8, ease: SILK })
+            }>
+            <path d="M109 128 C94 112 82 120 88 130 C92 136 102 132 109 128 Z" fill={`url(#${grad})`} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+            <path d="M109 128 C124 112 136 120 130 130 C126 136 116 132 109 128 Z" fill={`url(#${grad})`} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+            <path d="M104.5 124.5 H113.5 V131.5 H104.5 Z" fill={`url(#${grad})`} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
           </motion.g>
 
-          {/* Confetti: only the done state needs it, so it loads on demand. */}
-          {s === "done" && !reduce && <Suspense fallback={null}><Confetti ribbon={RIBBON} kraft={KRAFT} /></Suspense>}
+          {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, "#C9A27E"]} /></Suspense>}
         </motion.svg>
       </AnimatePresence>
     </span>
   );
 }
 
-function Eye({ cx, cy, closed, look, scan }: { cx: number; cy: number; closed: boolean; look: { x: number; y: number }; scan: boolean }) {
+/** One almond eye: a white path with an ink slit pupil (both paths). The lid closes by scaling the group. */
+function Eye({ d, cx, closed, glance, scan }: { d: string; cx: number; closed: boolean; glance: number; scan: boolean }) {
   return (
-    <g>
-      <motion.ellipse cx={cx} cy={cy} rx={8.5} ry={10} fill={INK} style={{ originX: `${cx}px`, originY: `${cy}px`, transformBox: "view-box" }} animate={{ scaleY: closed ? 0.1 : 1 }} transition={{ duration: 0.09 }} />
-      {!closed && (
-        <motion.circle cx={cx + 2.5} cy={cy - 3.5} r={3} fill={PAPER}
-          animate={scan ? { x: [-4, 3, -4] } : { x: look.x, y: look.y }}
-          transition={scan ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" } : SPRING} />
-      )}
-    </g>
+    <motion.g style={{ originX: `${cx}px`, originY: "46px", transformBox: "view-box" }} animate={{ scaleY: closed ? 0.12 : 1 }} transition={{ duration: 0.18, ease: SILK }}>
+      <path d={d} fill={PAPER} />
+      <motion.path d={`M${cx} 43.4 C${cx + 1} 45 ${cx + 1} 46.6 ${cx} 48.2 C${cx - 1} 46.6 ${cx - 1} 45 ${cx} 43.4 Z`} fill={INK}
+        animate={scan ? { x: [-3, 3, -3] } : { x: glance }}
+        transition={scan ? { duration: 2.6, repeat: Infinity, ease: SILK } : SPRING} />
+      {/* heavy upper lid keeps the look half-lidded and unbothered */}
+      <path d={`M${cx - 5.6} 45.6 C${cx - 2} 43.6 ${cx + 2} 43.6 ${cx + 5.6} 45.6`} fill="none" stroke={INK} strokeWidth={1.3} strokeLinecap="round" />
+    </motion.g>
   );
 }
 
@@ -232,8 +242,8 @@ function useBlink(on: boolean) {
     const next = () => {
       t = setTimeout(() => {
         setB(true);
-        t = setTimeout(() => { setB(false); next(); }, 140);
-      }, 3000 + Math.random() * 2000);
+        t = setTimeout(() => { setB(false); next(); }, 260);
+      }, 4200 + Math.random() * 3000);
     };
     next();
     return () => clearTimeout(t);
@@ -243,14 +253,14 @@ function useBlink(on: boolean) {
 
 function describe(s: MascotState) {
   return {
-    idle: "relaxing in the gift box",
-    chipIn: "catching a coin",
-    searching: "searching the shops",
-    ranking: "sorting the picks",
-    vote: "holding up a ballot",
-    veto: "waiting by the veto button",
-    buying: "wrapping up the gift",
-    done: "winking from the wrapped gift",
+    idle: "standing by the gift box",
+    chipIn: "nodding as a coin drops in",
+    searching: "searching the shops through a monocle",
+    ranking: "arranging the picks",
+    vote: "presenting the ballot",
+    veto: "hovering over the bell",
+    buying: "tying the bow on the gift",
+    done: "taking a bow",
     cancelled: "waving goodbye",
   }[s];
 }

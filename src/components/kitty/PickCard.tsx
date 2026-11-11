@@ -19,7 +19,7 @@ export function PickCard({ pick, currency }: { pick: Pick; currency: string }) {
         </div>
         {pick.reason && (
           <p className="flex gap-1.5 font-display text-[17px] leading-snug italic">
-            <Sparkles className="mt-1 size-3.5 shrink-0 text-ribbon" aria-hidden="true" />
+            <Sparkles className="mt-1 size-3.5 shrink-0 text-signal" aria-hidden="true" />
             {pick.reason}
           </p>
         )}

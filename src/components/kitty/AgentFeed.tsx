@@ -41,7 +41,7 @@ export function AgentFeed({ lines, working, upNext = [], title = "Kitty", mascot
         <KittyMascot state={mascot} fill={fill} size={72} />
         <div className="min-w-0">
           <p className="font-display text-[26px] leading-none">{title}</p>
-          <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground"><span className="size-1.5 rounded-full bg-ribbon" />Keeping you posted</p>
+          <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground"><span className="size-1.5 rounded-full bg-signal" />Keeping you posted</p>
         </div>
       </header>
       <ol className="px-5 py-3 text-[15px] leading-snug" aria-live="polite">

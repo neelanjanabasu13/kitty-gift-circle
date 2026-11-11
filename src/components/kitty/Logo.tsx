@@ -1,27 +1,33 @@
 import { Link } from "@tanstack/react-router";
 import { Lock, FastForward } from "lucide-react";
+import { useId } from "react";
 
 export function KittyMark({ className = "size-7", live = false }: { className?: string; live?: boolean }) {
-  // Static mark: Kitty's head peeking over a kraft box with a red ribbon.
+  // Static mark: the butler's black silhouette head with almond eyes, over a kraft box with a PayPal blue ribbon.
+  const g = `mk-${useId().replace(/:/g, "")}`;
   return (
     <span className="relative inline-flex">
       <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-        <path d="M11 17 L12.5 5 L19 12 Z M29 17 L27.5 5 L21 12 Z" fill="var(--color-card)" stroke="var(--color-foreground)" strokeWidth="1.8" strokeLinejoin="round" />
-        <ellipse cx="20" cy="18" rx="10" ry="8.5" fill="var(--color-card)" stroke="var(--color-foreground)" strokeWidth="1.8" />
-        <ellipse cx="16" cy="18" rx="2" ry="2.4" fill="var(--color-foreground)" />
-        <ellipse cx="24" cy="18" rx="2" ry="2.4" fill="var(--color-foreground)" />
+        <defs>
+          <linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#003087" /><stop offset="55%" stopColor="#0070E0" /><stop offset="100%" stopColor="#009CDE" /></linearGradient>
+        </defs>
+        <path d={MARK_HEAD} fill="var(--color-foreground)" />
+        <path d={MARK_EYES} fill="var(--color-card)" />
         <rect x="5" y="22" width="30" height="15" rx="2.5" fill="var(--color-kraft)" stroke="var(--color-foreground)" strokeWidth="1.8" />
-        <rect x="18" y="22" width="4" height="15" fill="var(--color-ribbon)" />
+        <rect x="18" y="22" width="4" height="15" fill={`url(#${g})`} />
       </svg>
       {live && (
         <span className="absolute -right-0.5 -bottom-0.5 size-2">
-          <span className="absolute inset-0 rounded-full bg-ribbon breathe" />
-          <span className="absolute inset-0 rounded-full bg-ribbon" />
+          <span className="absolute inset-0 rounded-full bg-signal breathe" />
+          <span className="absolute inset-0 rounded-full bg-signal" />
         </span>
       )}
     </span>
   );
 }
+
+export const MARK_HEAD = "M10 21 C9 16 10 11 12 8 L12.5 2 L17 7 C19 6.6 21 6.6 23 7 L27.5 2 L28 8 C30 11 31 16 30 21 C29 25 25 27 20 27 C15 27 11 25 10 21 Z";
+export const MARK_EYES = "M13.2 16.3 C14.8 14.4 17 14.4 18.6 16 C17 17.2 14.8 17.3 13.2 16.3 Z M21.4 16 C23 14.4 25.2 14.4 26.8 16.3 C25.2 17.3 23 17.2 21.4 16 Z";
 
 export function Logo() {
   return (
