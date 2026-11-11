@@ -1,3 +1,4 @@
+import type React from "react";
 import { useEffect, useId, useState, lazy, Suspense } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 const Confetti = lazy(() => import("./MascotConfetti"));
@@ -31,6 +32,36 @@ const ARM: Record<MascotState, { a: number; b: number }> = {
   cancelled: { a: -130, b: 0 },
 };
 
+type Prop = "giftA" | "giftB" | "coin" | "card";
+// Little things Kitty handles. Drawn in forearm space so they travel with the glove.
+const PROPS: Record<Prop, React.ReactNode> = {
+  giftA: (<g><rect x={123} y={106} width={15} height={14} rx={1.5} fill={KRAFT} stroke={INK} strokeWidth={1.5} /><path d="M130.5 106 V120" stroke={PAYPAL_BLUES[1]} strokeWidth={2.4} /></g>),
+  giftB: (<g><path d="M124 108 H136 V119 C136 121 124 121 124 119 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M136 110 C140 110 140 116 136 116" fill="none" stroke={INK} strokeWidth={1.5} /></g>),
+  coin: (<g><circle cx={131} cy={115} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.5} /><path d="M131 112 V118" stroke={INK} strokeWidth={1.2} strokeLinecap="round" /></g>),
+  card: (<rect x={123} y={100} width={14} height={19} rx={2} fill={PAPER} stroke={INK} strokeWidth={1.6} />),
+};
+
+// Choreographed loops: shoulder (a) and elbow (b) keyframes with props shown/hidden on the same timeline.
+type Act = { a: number[]; b: number[]; dur: number; times: number[]; props?: { k: Prop; o: number[] }[] };
+const ACTS: Partial<Record<MascotState, Act>> = {
+  // Count the takings: dip into the box, lift a coin to admire it, drop it back.
+  idle: { dur: 8, times: [0, 0.55, 0.65, 0.75, 0.88, 1], a: [0, 0, 20, -45, -45, 0], b: [0, 0, 10, -60, -60, 0],
+    props: [{ k: "coin", o: [0, 0, 0, 1, 1, 0] }] },
+  // Catch the coin, show it off, pop it in the box.
+  chipIn: { dur: 2.4, times: [0, 0.3, 0.6, 0.85, 1], a: [-8, -70, -70, 10, -8], b: [-6, -50, -50, 10, -6],
+    props: [{ k: "coin", o: [0, 1, 1, 0, 0] }] },
+  // Pick a gift up, inspect it at eye level, put it down, pick up another.
+  searching: { dur: 6, times: [0, 0.15, 0.4, 0.5, 0.65, 0.9, 1], a: [10, -95, -95, 10, -95, -95, 10], b: [10, -105, -105, 10, -105, -105, 10],
+    props: [{ k: "giftA", o: [1, 1, 1, 0, 0, 0, 1] }, { k: "giftB", o: [0, 0, 0, 1, 1, 1, 0] }] },
+  // Take a card from the row, consider it, file it into the box.
+  ranking: { dur: 3.6, times: [0, 0.25, 0.5, 0.75, 1], a: [-40, -75, -75, 15, -40], b: [-20, -30, -30, 15, -20],
+    props: [{ k: "card", o: [0, 1, 1, 0, 0] }] },
+  // Paw hovers, then two dainty taps on the bell.
+  veto: { dur: 3, times: [0, 0.5, 0.6, 0.7, 0.8, 1], a: [-22, -22, -8, -22, -8, -22], b: [-10, -10, 4, -10, 4, -10] },
+  // Wrapping: pull the ribbon down, loop it over, tug it tight.
+  buying: { dur: 3, times: [0, 0.24, 0.45, 0.7, 1], a: [-55, 15, -70, -30, -55], b: [45, 30, 60, 80, 45] },
+};
+
 const TAIL = {
   s1: "M66 160 C42 158 30 142 38 126 C46 110 34 94 20 92",
   s2: "M66 160 C44 164 24 150 32 132 C40 114 28 100 14 104",
@@ -59,6 +90,7 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
     : s === "cancelled" ? TAIL.low
     : R([TAIL.s3, TAIL.s1, TAIL.s3], TAIL.s3);
   const ribbonOn = s !== "cancelled";
+  const act = reduce ? undefined : ACTS[s];
 
   return (
     <span className={className} style={{ display: "inline-block", width: size, height: size }} role="img" aria-label={label ?? `Kitty, ${describe(s)}`}>
@@ -128,19 +160,22 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
               {s === "searching" && <path d="M105.5 38 A8.5 8.5 0 1 1 105.4 38 Z M113 52 C116 60 114 68 110 74" fill="none" stroke={PAPER} strokeWidth={1.4} />}
             </motion.g>
 
-            {/* right arm: shoulder then elbow, softer spring so it overlaps the head move */}
+            {/* right arm: choreographed per state (pick up, inspect, put down, catch coins, ring, tug ribbon) */}
             <motion.g style={{ originX: "112px", originY: "86px", transformBox: "view-box" }}
-              animate={{ rotate: arm.a }} transition={{ ...LIMB, delay: reduce ? 0 : 0.08 }}>
+              animate={{ rotate: act ? act.a : arm.a }}
+              transition={act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : { ...LIMB, delay: reduce ? 0 : 0.08 }}>
               <path d="M112 86 L124 106" stroke={INK} strokeWidth={7} strokeLinecap="round" />
               <motion.g style={{ originX: "124px", originY: "106px", transformBox: "view-box" }}
-                animate={
-                  s === "cancelled" ? { rotate: R([-25, 20, -25], 0) }
-                  : s === "ranking" ? { rotate: R([-30, -6, -30], -20) }
-                  : s === "veto" ? { rotate: arm.b, y: R([0, -2.5, 0], 0) }
-                  : { rotate: arm.b }
-                }
-                transition={s === "cancelled" ? loop(1.3) : s === "ranking" ? loop(3.2) : s === "veto" ? { y: loop(1.6), rotate: { ...LIMB, delay: 0.16 } } : { ...LIMB, delay: reduce ? 0 : 0.16 }}>
+                animate={act ? { rotate: act.b } : s === "cancelled" ? { rotate: R([-25, 20, -25], 0) } : { rotate: arm.b }}
+                transition={act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : s === "cancelled" ? loop(1.3) : { ...LIMB, delay: reduce ? 0 : 0.16 }}>
                 <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
+                {/* props held in the glove */}
+                {act?.props?.map((pr, i) => (
+                  <motion.g key={`${s}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: pr.o }}
+                    transition={{ duration: act.dur, times: act.times, repeat: Infinity, ease: "linear" }}>
+                    {PROPS[pr.k]}
+                  </motion.g>
+                ))}
                 {/* white glove */}
                 <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
                 <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
