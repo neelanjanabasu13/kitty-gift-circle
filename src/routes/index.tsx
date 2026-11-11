@@ -8,6 +8,7 @@ import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
 import { KittyMascot, type MascotState } from "@/components/kitty/KittyMascot";
 import { PotMeter } from "@/components/kitty/PotMeter";
 import { PickCard } from "@/components/kitty/PickCard";
+import { seedDemoPot } from "@/lib/kitty.functions";
 import casserole from "@/assets/pick-casserole.jpg";
 import pourover from "@/assets/pick-pourover.jpg";
 import pasta from "@/assets/pick-pasta.jpg";
@@ -56,6 +57,7 @@ function Landing() {
               <ArrowUp className="size-5" />
             </button>
           </motion.form>
+          <LiveDemoButton />
         </section>
 
         <LiveDemo step={step} />
@@ -107,14 +109,17 @@ const SCRIPT: { raised: number; people: number; line: string; kind: string; orde
   { raised: 120, people: 10, kind: "paid_out", mascot: "done", line: "All done. Priya's gift is paid for, and nobody fronted a penny.", order: ["a", "c", "b"], working: "" },
 ];
 
+// Each step lasts long enough for Kitty to finish his routine (searching browses four gifts in 12s).
+const STEP_MS: Partial<Record<MascotState, number>> = { idle: 8000, chipIn: 4800, searching: 12000, ranking: 7200, buying: 6000, done: 5600 };
+
 function useDemoStep() {
   const reduce = useReducedMotion();
   const [step, setStep] = useState(0);
   useEffect(() => {
     if (reduce) return;
-    const t = setInterval(() => setStep((s) => (s + 1) % SCRIPT.length), 2800);
-    return () => clearInterval(t);
-  }, [reduce]);
+    const t = setTimeout(() => setStep((s) => (s + 1) % SCRIPT.length), STEP_MS[SCRIPT[step]!.mascot] ?? 4000);
+    return () => clearTimeout(t);
+  }, [reduce, step]);
   return step;
 }
 
@@ -142,5 +147,30 @@ function LiveDemo({ step }: { step: number }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function LiveDemoButton() {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const start = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await seedDemoPot({ data: {} });
+      try {
+        const store = JSON.parse(localStorage.getItem("kitty:admin") || "{}");
+        store[r.slug] = r.adminToken;
+        localStorage.setItem("kitty:admin", JSON.stringify(store));
+      } catch { /* ignore */ }
+      navigate({ to: "/k/$slug/manage", params: { slug: r.slug }, search: { t: r.adminToken } });
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't open the live demo."); setBusy(false); }
+  };
+  return (
+    <div className="mt-5">
+      <Button variant="outline" size="tap" onClick={start} disabled={busy}>{busy ? "Kitty is shopping for Priya, about 30 seconds..." : "Watch Kitty live with a demo pot"}</Button>
+      <p className="mt-2 text-[13px] text-muted-foreground">A ready-made pot for Priya with demo chip-ins and a sped-up clock. No real money moves.</p>
+      {err && <p role="alert" className="mt-2 text-[14px]">{err}</p>}
+    </div>
   );
 }

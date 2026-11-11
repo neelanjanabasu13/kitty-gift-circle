@@ -32,12 +32,15 @@ const ARM: Record<MascotState, { a: number; b: number }> = {
   cancelled: { a: -130, b: 0 },
 };
 
-type Prop = "giftA" | "giftB" | "coin" | "card";
+type Prop = "giftA" | "giftB" | "coin" | "card" | "camera" | "pan" | "candle";
 // Little things Kitty handles. Drawn in forearm space so they travel with the glove.
 const PROPS: Record<Prop, React.ReactNode> = {
   giftA: (<g><rect x={123} y={106} width={15} height={14} rx={1.5} fill={KRAFT} stroke={INK} strokeWidth={1.5} /><path d="M130.5 106 V120" stroke={PAYPAL_BLUES[1]} strokeWidth={2.4} /></g>),
   giftB: (<g><path d="M124 108 H136 V119 C136 121 124 121 124 119 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M136 110 C140 110 140 116 136 116" fill="none" stroke={INK} strokeWidth={1.5} /></g>),
   coin: (<g><circle cx={131} cy={115} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.5} /><path d="M131 112 V118" stroke={INK} strokeWidth={1.2} strokeLinecap="round" /></g>),
+  camera: (<g><rect x={122} y={108} width={18} height={12} rx={2} fill={INK} stroke={INK} strokeWidth={1.2} /><path d="M125 108 V105.5 H130 V108" fill={INK} /><path d="M131 110.5 A3.6 3.6 0 1 1 130.9 110.5 Z" fill={PAPER} stroke={INK} strokeWidth={1.2} /><path d="M136 110 H138.5" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
+  pan: (<g><path d="M121 110 H139 V116 C139 120 121 120 121 116 Z" fill={INK} /><path d="M118 111 H121 M139 111 H142" stroke={INK} strokeWidth={2.4} strokeLinecap="round" /><path d="M120 108.5 C124 106 136 106 140 108.5" fill="none" stroke={INK} strokeWidth={1.6} strokeLinecap="round" /><path d="M128 108 H132" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
+  candle: (<g><path d="M124 109 H137 V120 C137 121.5 124 121.5 124 120 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M124 112 H137" stroke={KRAFT_DEEP} strokeWidth={1.4} /><path d="M130.5 109 V106" stroke={INK} strokeWidth={1} /><path d="M130.5 99.5 C132.5 102 132.5 104.5 130.5 105.5 C128.5 104.5 128.5 102 130.5 99.5 Z" fill={PAYPAL_BLUES[1]} /></g>),
   card: (<rect x={123} y={100} width={14} height={19} rx={2} fill={PAPER} stroke={INK} strokeWidth={1.6} />),
 };
 
@@ -51,11 +54,17 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   chipIn: { dur: 2.4, times: [0, 0.3, 0.6, 0.85, 1], a: [-8, -70, -70, 10, -8], b: [-6, -50, -50, 10, -6],
     props: [{ k: "coin", o: [0, 1, 1, 0, 0] }] },
   // Pick a gift up, inspect it at eye level, put it down, pick up another.
-  searching: { dur: 6, times: [0, 0.15, 0.4, 0.5, 0.65, 0.9, 1], a: [10, -95, -95, 10, -95, -95, 10], b: [10, -105, -105, 10, -105, -105, 10],
-    props: [{ k: "giftA", o: [1, 1, 1, 0, 0, 0, 1] }, { k: "giftB", o: [0, 0, 0, 1, 1, 1, 0] }] },
-  // Take a card from the row, consider it, file it into the box.
+  searching: { dur: 12, times: [0, 0.06, 0.18, 0.25, 0.31, 0.43, 0.5, 0.56, 0.68, 0.75, 0.81, 0.93, 1],
+    a: [10, -95, -95, 10, -95, -95, 10, -95, -95, 10, -95, -95, 10], b: [10, -105, -105, 10, -105, -105, 10, -105, -105, 10, -105, -105, 10],
+    props: [
+      { k: "camera", o: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] },
+      { k: "pan", o: [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0] },
+      { k: "candle", o: [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0] },
+      { k: "giftB", o: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0] },
+    ] },
+  // Take the chosen gift, consider it once more, pack it into the box.
   ranking: { dur: 3.6, times: [0, 0.25, 0.5, 0.75, 1], a: [-40, -75, -75, 15, -40], b: [-20, -30, -30, 15, -20],
-    props: [{ k: "card", o: [0, 1, 1, 0, 0] }] },
+    props: [{ k: "giftA", o: [0, 1, 1, 0, 0] }] },
   // Paw hovers, then two dainty taps on the bell.
   veto: { dur: 3, times: [0, 0.5, 0.6, 0.7, 0.8, 1], a: [-22, -22, -8, -22, -8, -22], b: [-10, -10, 4, -10, 4, -10] },
   // Wrapping: pull the ribbon down, loop it over, tug it tight.
@@ -91,6 +100,20 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
     : R([TAIL.s3, TAIL.s1, TAIL.s3], TAIL.s3);
   const ribbonOn = s !== "cancelled";
   const act = reduce ? undefined : ACTS[s];
+  // Which held prop is visible, driven by a clock on the same timeline as the arm keyframes.
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    if (!act?.props) return;
+    const t0 = performance.now();
+    const id = setInterval(() => setPhase(((performance.now() - t0) / 1000 / act.dur) % 1), 80);
+    return () => clearInterval(id);
+  }, [act]);
+  const propOn = (o: number[]) => {
+    if (!act) return false;
+    let i = 0;
+    while (i < act.times.length - 1 && act.times[i + 1]! <= phase) i++;
+    return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - act.times[i]! < ((act.times[i + 1] ?? 1) - act.times[i]!) / 2;
+  };
 
   return (
     <span className={className} style={{ display: "inline-block", width: size, height: size }} role="img" aria-label={label ?? `Kitty, ${describe(s)}`}>
@@ -110,14 +133,6 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
           <motion.path d={TAIL.s1} fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round"
             animate={{ d: tailD }}
             transition={Array.isArray(tailD) ? { duration: 5.5, repeat: Infinity, ease: SILK } : t({ duration: 0.9, ease: SILK })} />
-
-          {/* Three little cards (ranking), arranged by the glove */}
-          {s === "ranking" && [0, 1, 2].map((i) => (
-            <motion.rect key={i} y={88} width={16} height={22} rx={2.5} fill={PAPER} stroke={INK} strokeWidth={1.8}
-              initial={{ x: 128 + i * 18, opacity: 0 }}
-              animate={R({ x: [128 + i * 18, 128 + ((i + 1) % 3) * 18, 128 + ((i + 2) % 3) * 18, 128 + i * 18], opacity: 1, rotate: [-4 + i * 4, 0, 4 - i * 4, -4 + i * 4] }, { x: 128 + i * 18, opacity: 1, rotate: -4 + i * 4 })}
-              transition={reduce ? { duration: 0 } : { duration: 3.2, repeat: Infinity, ease: SILK, delay: i * 0.08 }} />
-          ))}
 
           {/* The butler */}
           <motion.g animate={{ y: s === "buying" ? 2 : 0 }} transition={SPRING}>
@@ -170,12 +185,7 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
                 transition={act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : s === "cancelled" ? loop(1.3) : { ...LIMB, delay: reduce ? 0 : 0.16 }}>
                 <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
                 {/* props held in the glove */}
-                {act?.props?.map((pr, i) => (
-                  <motion.g key={`${s}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: pr.o }}
-                    transition={{ duration: act.dur, times: act.times, repeat: Infinity, ease: "linear" }}>
-                    {PROPS[pr.k]}
-                  </motion.g>
-                ))}
+                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`}>{PROPS[pr.k]}</g> : null)}
                 {/* white glove */}
                 <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
                 <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
@@ -290,8 +300,8 @@ function describe(s: MascotState) {
   return {
     idle: "standing by the gift box",
     chipIn: "nodding as a coin drops in",
-    searching: "searching the shops through a monocle",
-    ranking: "arranging the picks",
+    searching: "browsing gifts: a camera, a pan, a candle and a mug",
+    ranking: "packing the chosen gift into the box",
     vote: "presenting the ballot",
     veto: "hovering over the bell",
     buying: "tying the bow on the gift",
