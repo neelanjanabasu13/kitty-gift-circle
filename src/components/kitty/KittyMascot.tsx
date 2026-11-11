@@ -32,7 +32,7 @@ const ARM: Record<MascotState, { a: number; b: number }> = {
   cancelled: { a: -130, b: 0 },
 };
 
-type Prop = "giftA" | "giftB" | "coin" | "card" | "camera" | "pan" | "candle";
+type Prop = "giftA" | "giftB" | "coin" | "card" | "camera" | "pan" | "candle" | "chocs";
 // Little things Kitty handles. Drawn in forearm space so they travel with the glove.
 const PROPS: Record<Prop, React.ReactNode> = {
   giftA: (<g><rect x={123} y={106} width={15} height={14} rx={1.5} fill={KRAFT} stroke={INK} strokeWidth={1.5} /><path d="M130.5 106 V120" stroke={PAYPAL_BLUES[1]} strokeWidth={2.4} /></g>),
@@ -41,11 +41,31 @@ const PROPS: Record<Prop, React.ReactNode> = {
   camera: (<g><rect x={122} y={108} width={18} height={12} rx={2} fill={INK} stroke={INK} strokeWidth={1.2} /><path d="M125 108 V105.5 H130 V108" fill={INK} /><path d="M131 110.5 A3.6 3.6 0 1 1 130.9 110.5 Z" fill={PAPER} stroke={INK} strokeWidth={1.2} /><path d="M136 110 H138.5" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
   pan: (<g><path d="M121 110 H139 V116 C139 120 121 120 121 116 Z" fill={INK} /><path d="M118 111 H121 M139 111 H142" stroke={INK} strokeWidth={2.4} strokeLinecap="round" /><path d="M120 108.5 C124 106 136 106 140 108.5" fill="none" stroke={INK} strokeWidth={1.6} strokeLinecap="round" /><path d="M128 108 H132" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
   candle: (<g><path d="M124 109 H137 V120 C137 121.5 124 121.5 124 120 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M124 112 H137" stroke={KRAFT_DEEP} strokeWidth={1.4} /><path d="M130.5 109 V106" stroke={INK} strokeWidth={1} /><path d="M130.5 99.5 C132.5 102 132.5 104.5 130.5 105.5 C128.5 104.5 128.5 102 130.5 99.5 Z" fill={PAYPAL_BLUES[1]} /></g>),
+  chocs: (<g><rect x={121} y={109} width={19} height={11} rx={1.5} fill={INK} /><path d="M124 112.5 H127 M129 112.5 H132 M134 112.5 H137 M124 116.5 H127 M129 116.5 H132 M134 116.5 H137" stroke={KRAFT} strokeWidth={2.2} strokeLinecap="round" /><path d="M130.5 109 V106 M127.5 104.5 C129 106 130.5 106 130.5 106 C130.5 106 132 106 133.5 104.5" fill="none" stroke={PAYPAL_BLUES[1]} strokeWidth={1.4} strokeLinecap="round" /></g>),
   card: (<rect x={123} y={100} width={14} height={19} rx={2} fill={PAPER} stroke={INK} strokeWidth={1.6} />),
 };
 
 // Choreographed loops: shoulder (a) and elbow (b) keyframes with props shown/hidden on the same timeline.
-type Act = { a: number[]; b: number[]; dur: number; times: number[]; props?: { k: Prop; o: number[] }[] };
+type Act = { a: number[]; b: number[]; dur: number; times: number[]; props?: { k: Prop; o: number[] }[]; hold?: boolean };
+// Browsing: for each item, reach into the box, lift it to the monocle, turn it over, then set it back down.
+const BEAT = [0, 0.2, 0.42, 0.62, 0.86];
+const BEAT_A = [12, -96, -90, -99, 12];
+const BEAT_B = [12, -106, -114, -100, 12];
+function browse(items: Prop[]): Act {
+  const n = items.length;
+  const times: number[] = [], a: number[] = [], b: number[] = [];
+  for (let k = 0; k < n; k++) BEAT.forEach((f, j) => { times.push((k + f) / n); a.push(BEAT_A[j]!); b.push(BEAT_B[j]!); });
+  times.push(1); a.push(12); b.push(12);
+  // o[i] marks the interval starting at times[i]; the item rides in the glove from pick-up until it's set down.
+  const props = items.map((it, k) => ({ k: it, o: times.map((_, i) => (Math.floor(i / BEAT.length) === k && i % BEAT.length < BEAT.length - 1 ? 1 : 0)) }));
+  return { dur: n * 3.2, times, a, b, props, hold: true };
+}
+/** Head looks at whatever the glove is holding: tilts in while inspecting, back down to the box between items. */
+function browseHead(act: Act) {
+  return act.times.map((_, i) => { const j = i % BEAT.length; return i === act.times.length - 1 ? -2 : j === 2 ? -9 : j === 3 ? 4 : -2; });
+}
+
+
 const ACTS: Partial<Record<MascotState, Act>> = {
   // Count the takings: dip into the box, lift a coin to admire it, drop it back.
   idle: { dur: 8, times: [0, 0.55, 0.65, 0.75, 0.88, 1], a: [0, 0, 20, -45, -45, 0], b: [0, 0, 10, -60, -60, 0],
@@ -54,14 +74,7 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   chipIn: { dur: 2.4, times: [0, 0.3, 0.6, 0.85, 1], a: [-8, -70, -70, 10, -8], b: [-6, -50, -50, 10, -6],
     props: [{ k: "coin", o: [0, 1, 1, 0, 0] }] },
   // Pick a gift up, inspect it at eye level, put it down, pick up another.
-  searching: { dur: 12, times: [0, 0.06, 0.18, 0.25, 0.31, 0.43, 0.5, 0.56, 0.68, 0.75, 0.81, 0.93, 1],
-    a: [10, -95, -95, 10, -95, -95, 10, -95, -95, 10, -95, -95, 10], b: [10, -105, -105, 10, -105, -105, 10, -105, -105, 10, -105, -105, 10],
-    props: [
-      { k: "camera", o: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] },
-      { k: "pan", o: [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0] },
-      { k: "candle", o: [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0] },
-      { k: "giftB", o: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0] },
-    ] },
+  searching: browse(["camera", "pan", "candle", "chocs", "giftB"]),
   // Take the chosen gift, consider it once more, pack it into the box.
   ranking: { dur: 3.6, times: [0, 0.25, 0.5, 0.75, 1], a: [-40, -75, -75, 15, -40], b: [-20, -30, -30, 15, -20],
     props: [{ k: "giftA", o: [0, 1, 1, 0, 0] }] },
@@ -112,6 +125,7 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
     if (!act) return false;
     let i = 0;
     while (i < act.times.length - 1 && act.times[i + 1]! <= phase) i++;
+    if (act.hold) return o[i] === 1;
     return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - act.times[i]! < ((act.times[i + 1] ?? 1) - act.times[i]!) / 2;
   };
 
@@ -154,9 +168,10 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
               animate={
                 s === "chipIn" ? R({ rotate: [0, 9, 0], y: [0, 3, 0] }, { rotate: 6, y: 2 })
                 : s === "done" ? R({ y: [0, 10, 10, 0], rotate: [0, 6, 6, 0] }, { y: 10, rotate: 6 })
+                : s === "searching" && act ? { rotate: browseHead(act), y: 0 }
                 : { rotate: s === "ranking" ? 9 : s === "veto" ? -5 : s === "searching" ? -3 : s === "cancelled" ? -4 : 0, y: s === "idle" ? R([0, -0.8, 0], 0) : 0 }
               }
-              transition={s === "chipIn" ? loop(1.7, 0.35) : s === "done" ? loop(2.8, 0.15) : s === "idle" ? loop(4.2) : { ...SPRING, delay: 0.06 }}>
+              transition={s === "searching" && act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : s === "chipIn" ? loop(1.7, 0.35) : s === "done" ? loop(2.8, 0.15) : s === "idle" ? loop(4.2) : { ...SPRING, delay: 0.06 }}>
               <path d="M76 56 C74 46 76 36 80 30 L82 14 L92 27 C94 26.5 98 26.5 100 27 L110 14 L112 30 C116 36 118 46 116 56 C114 66 106 72 96 72 C86 72 78 66 76 56 Z" fill={INK} />
               {/* inner ears */}
               <path d="M83.5 20 L84.5 28 L89 26 Z M108.5 20 L107.5 28 L103 26 Z" fill={PAPER} opacity={0.22} />
@@ -300,7 +315,7 @@ function describe(s: MascotState) {
   return {
     idle: "standing by the gift box",
     chipIn: "nodding as a coin drops in",
-    searching: "browsing gifts: a camera, a pan, a candle and a mug",
+    searching: "browsing gifts: a camera, a pan, a candle, chocolates and a mug",
     ranking: "packing the chosen gift into the box",
     vote: "presenting the ballot",
     veto: "hovering over the bell",

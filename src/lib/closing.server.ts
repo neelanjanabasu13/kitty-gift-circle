@@ -260,7 +260,8 @@ async function buy(pot: any) {
     await setWorking(pot.id, `Checking ${pick.retailer ?? "the shop"} still has the ${short(pick.title)}...`);
     const held = await heldTotal(pot.id);
     const { refreshOffer } = await import("./channel3.server");
-    const r = pick.channel3_product_id
+    // Demo pots skip the live recheck (about 40s); real pots always recheck.
+    const r = pick.channel3_product_id && !pot.is_demo
       ? await refreshOffer({ productId: pick.channel3_product_id, title: pick.title, retailer: pick.retailer, potId: pot.id, maxPrice: held })
       : ({ status: "not_configured" } as const);
     if (r.status === "ok") {
@@ -277,7 +278,7 @@ async function buy(pot: any) {
       await say(pot.id, "prebuy_moved", `${short(pick.title)} isn't listed any more. Moving to the next pick.`);
       return swapToNext(pot, decision, held);
     } else {
-      await say(pot.id, "prebuy_skip", "Couldn't re-check the shop just now, so I'm going with the price I saw.");
+      await say(pot.id, "prebuy_skip", pot.is_demo ? "This is a demo, so I'm using the price I found earlier." : "Couldn't re-check the shop just now, so I'm going with the price I saw.");
     }
 
     // 2. Hold checks.

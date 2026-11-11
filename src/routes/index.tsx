@@ -108,7 +108,7 @@ const SCRIPT: { raised: number; people: number; line: string; kind: string; orde
 ];
 
 // Each step lasts long enough for Kitty to finish his routine (searching browses four gifts in 12s).
-const STEP_MS: Partial<Record<MascotState, number>> = { idle: 8000, chipIn: 4800, searching: 12000, ranking: 7200, buying: 6000, done: 5600 };
+const STEP_MS: Partial<Record<MascotState, number>> = { idle: 8000, chipIn: 4800, searching: 16000, ranking: 7200, buying: 6000, done: 5600 };
 
 function useDemoStep() {
   const reduce = useReducedMotion();

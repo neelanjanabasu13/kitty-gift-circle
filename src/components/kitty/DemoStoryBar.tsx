@@ -26,7 +26,7 @@ export function DemoStoryBar({ slug, adminToken, status, chipped }: { slug: stri
 
   const step = async (skip = false) => {
     // Keep the page fresh even while a long step (a shop search, the final buy) is still running.
-    qc.invalidateQueries({ queryKey: ["pot", slug] });
+    qc.invalidateQueries({ queryKey: ["pot", slug] }, { cancelRefetch: false });
     if (busy.current && Date.now() - busy.current < 90_000) return;
     busy.current = Date.now();
     try {
@@ -34,7 +34,7 @@ export function DemoStoryBar({ slug, adminToken, status, chipped }: { slug: stri
       setErr(false);
     } catch { setErr(true); } finally {
       busy.current = 0;
-      qc.invalidateQueries({ queryKey: ["pot", slug] });
+      qc.invalidateQueries({ queryKey: ["pot", slug] }, { cancelRefetch: false });
     }
   };
 
@@ -49,7 +49,7 @@ export function DemoStoryBar({ slug, adminToken, status, chipped }: { slug: stri
   const replay = async () => {
     await resetDemoPot({ data: { slug, adminToken } });
     setPaused(false);
-    qc.invalidateQueries({ queryKey: ["pot", slug] });
+    qc.invalidateQueries({ queryKey: ["pot", slug] }, { cancelRefetch: false });
   };
 
   return (

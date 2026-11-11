@@ -111,6 +111,8 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
     if (last?.[0]?.kind !== "search_unconfigured") await say(potId, "search_unconfigured", "I can start looking in shops as soon as the shop key is added.");
     return false;
   }
+  // Demo pots reuse real Channel3 results Kitty already found for an earlier demo pot, so the story never waits on live shops.
+  if (pot.is_demo && (await reuseDemoPicks(potId, pot, raised, replaceAll))) return true;
   const money = (n: number) => formatMoney(n, pot.currency);
   const profile = {
     name: pot.recipient_name, occasion: pot.occasion, closeness: pot.closeness, likes: pot.likes ?? [], dislikes: pot.dislikes ?? [],
@@ -251,4 +253,25 @@ export async function rerankAt(potId: string, raised: number) {
   const { data: pot } = await db.from("pots").select("currency, mode").eq("id", potId).single();
   if (pot?.mode === "fixed_split") return;
   await rerank(potId, raised, {}, { kind: "withdrawn" }, pot?.currency ?? "GBP");
+}
+
+/** Copy real, previously searched-and-scored candidates from another demo pot for the same person. */
+async function reuseDemoPicks(potId: string, pot: any, raised: number, replaceAll: boolean) {
+  const db = await admin();
+  const stretch = Math.round(Math.max(raised * 1.3, SEARCH_BANDS.find((b) => b > raised) ?? raised * 1.3));
+  const { data: donors } = await db.from("pots").select("id").eq("is_demo", true).eq("recipient_name", pot.recipient_name).neq("id", potId).order("created_at", { ascending: false }).limit(10);
+  for (const d of donors ?? []) {
+    const { data: rows } = await db.from("candidates").select("channel3_product_id, title, image_url, offer_url, retailer, price, currency, category, fit_score, reason, signals, fetched_at").eq("pot_id", d.id).lte("price", stretch).gte("price", raised * 0.5);
+    if (!rows || rows.length < 6) continue;
+    const bandLabel = String(bandFor(raised));
+    if (replaceAll) await db.from("candidates").delete().eq("pot_id", potId);
+    const { data: existing } = await db.from("candidates").select("channel3_product_id").eq("pot_id", potId);
+    const have = new Set((existing ?? []).map((e) => e.channel3_product_id));
+    const fresh = rows.filter((r) => !have.has(r.channel3_product_id)).map((r) => ({ ...r, pot_id: potId, band: bandLabel }));
+    if (fresh.length) await db.from("candidates").insert(fresh as any);
+    const shops = new Set(rows.map((r) => r.retailer)).size;
+    await say(potId, "searched", `I looked through ${shops} shops for gifts under ${formatMoney(raised, pot.currency)}.`, { found: rows.length, reused: true });
+    return true;
+  }
+  return false;
 }

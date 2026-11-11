@@ -19,7 +19,7 @@ export function useLivePot(slug: string, adminToken?: string) {
     const channel = supabase
       .channel(`pot-${potId}`)
       .on("broadcast", { event: "changed" }, () => {
-        qc.invalidateQueries({ queryKey: ["pot", slug] });
+        qc.invalidateQueries({ queryKey: ["pot", slug] }, { cancelRefetch: false });
       })
       .subscribe();
     return () => {
