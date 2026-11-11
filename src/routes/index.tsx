@@ -9,9 +9,6 @@ import { KittyMascot, type MascotState } from "@/components/kitty/KittyMascot";
 import { PotMeter } from "@/components/kitty/PotMeter";
 import { PickCard } from "@/components/kitty/PickCard";
 import { seedDemoPot } from "@/lib/kitty.functions";
-import casserole from "@/assets/pick-casserole.jpg";
-import pourover from "@/assets/pick-pourover.jpg";
-import pasta from "@/assets/pick-pasta.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -95,17 +92,18 @@ function Landing() {
 }
 
 // ---------- Looping demo: chip-ins arrive, meter fills, picks re-rank, Kitty narrates ----------
+// Real Channel3 results Kitty found for a demo pot for Priya (titles, shops, prices and photos as returned by the search).
 const PICKS = [
-  { id: "a", title: "Le Creuset round casserole, 22cm", retailer: "John Lewis", category: "Cooking", price: 118, image_url: casserole, reason: "She cooks every Sunday and loves a good pot." },
-  { id: "b", title: "Hand-thrown pour-over coffee set", retailer: "Etsy", category: "Ceramics", price: 64, image_url: pourover, reason: "Coffee and pottery, both on her list." },
-  { id: "c", title: "Pasta-making class for two", retailer: "Obby", category: "Experiences", price: 95, image_url: pasta, reason: "An evening out that still feels like cooking." },
+  { id: "a", title: "Staub Stoneware Rectangular Baking Dish Set", retailer: "zwilling.com", category: "Cooking", price: 119, image_url: "https://cdn.trychannel3.com/29b30fea-41c4-49b9-aeef-ca1eacc7e737?aid=01M75QZ23Z86H372V10PYA0DEC&mid=YaG3", reason: "Staub combines durable ceramics with Priya's passion for cooking." },
+  { id: "b", title: "Indigo Storm Ceramic Pasta Bowls", retailer: "abask.com", category: "Ceramics", price: 120, image_url: "https://cdn.trychannel3.com/89fc6a25-3ae2-4bbc-abde-2856bbc65aab?aid=01M75QZ21B46DHR4PMWANXXGD3&mid=tqmq", reason: "Gorgeous glazed ceramics she can show off when cooking." },
+  { id: "c", title: "Staub Rectangular Ceramic Ovenware Set", retailer: "zwilling.com", category: "Cooking", price: 94.95, image_url: "https://cdn.trychannel3.com/4b867cc3-5017-42c4-958e-e6b78f8f3177?aid=01M75QZ23Z86H372V10PYA0DEC&mid=YaG3", reason: "Oven-to-table ceramic dishes for someone who loves cooking." },
 ];
 const SCRIPT: { raised: number; people: number; line: string; kind: string; order: string[]; working: string; mascot: MascotState }[] = [
   { raised: 72, people: 6, kind: "pot_created", mascot: "idle", line: "Sam set up a kitty for Priya. Noted: she loves cooking, ceramics and coffee.", order: ["b", "c", "a"], working: "Settling in" },
   { raised: 87, people: 7, kind: "contribution_held", mascot: "chipIn", line: "Jo just chipped in £15. That gets us to £87.", order: ["b", "c", "a"], working: "Counting it in" },
   { raised: 97, people: 8, kind: "searched", mascot: "searching", line: "I looked through 5 shops for cooking gifts under £97.", order: ["c", "b", "a"], working: "Looking through shops for cooking gifts" },
-  { raised: 112, people: 9, kind: "reranked", mascot: "ranking", line: "Ravi chipped in, so I reshuffled. The casserole is nearly in reach.", order: ["c", "a", "b"], working: "Weighing up 9 gifts for Priya" },
-  { raised: 120, people: 10, kind: "captured", mascot: "buying", line: "We hit £120! Buying the Le Creuset casserole now.", order: ["a", "c", "b"], working: "Wrapping it up" },
+  { raised: 112, people: 9, kind: "reranked", mascot: "ranking", line: "Ravi chipped in, so I reshuffled. The Staub baking dishes are nearly in reach.", order: ["c", "a", "b"], working: "Weighing up 9 gifts for Priya" },
+  { raised: 120, people: 10, kind: "captured", mascot: "buying", line: "We hit £120! Buying the Staub baking dish set now.", order: ["a", "c", "b"], working: "Wrapping it up" },
   { raised: 120, people: 10, kind: "paid_out", mascot: "done", line: "All done. Priya's gift is paid for, and nobody fronted a penny.", order: ["a", "c", "b"], working: "" },
 ];
 
@@ -168,8 +166,8 @@ function LiveDemoButton() {
   };
   return (
     <div className="mt-5">
-      <Button variant="outline" size="tap" onClick={start} disabled={busy}>{busy ? "Kitty is shopping for Priya, about 30 seconds..." : "Watch Kitty live with a demo pot"}</Button>
-      <p className="mt-2 text-[13px] text-muted-foreground">A ready-made pot for Priya with demo chip-ins and a sped-up clock. No real money moves.</p>
+      <Button variant="outline" size="tap" onClick={start} disabled={busy}>{busy ? "Opening Priya's pot..." : err ? "Try again" : "Watch Kitty live with a demo pot"}</Button>
+      <p className="mt-2 text-[13px] text-muted-foreground">A three-minute story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
       {err && <p role="alert" className="mt-2 text-[14px]">{err}</p>}
     </div>
   );

@@ -143,7 +143,8 @@ async function closeIfDue(pot: any, now: Date) {
     }
     return;
   }
-  const closes = voteClosesAt(pot.vote_window as VoteWindow, now, pot);
+  // Start the window after the final search finishes, so a slow search never eats the vote.
+  const closes = voteClosesAt(pot.vote_window as VoteWindow, new Date(), pot);
   if (await transition(pot.id, "collecting", { status: "voting", closed_at: now.toISOString(), vote_closes_at: closes?.toISOString(), vote_candidate_ids: picks.map((p) => p.id) })) {
     await say(pot.id, "vote_open", `Time to vote! ${picks.length} picks are up. It closes at ${clockTime(closes!)} or once everyone who wants to vote has.`);
   }

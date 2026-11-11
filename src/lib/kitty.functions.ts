@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { DEFAULT_CURRENCY } from "./config";
+import { DEMO_CAST, DEMO_GAP_MS, DEMO_SEARCH_AT, DEMO_STORY_FACTOR, DEMO_TOTAL, demoLine, demoStage } from "./demoScript";
 import { DEMO_FACTOR, effectiveDeadline, isDemoHold, scaleMs, storedDeadlineFor } from "./closing";
 
 // All Kitty reads and writes run here with the server client. Public reads are keyed on slug and
@@ -790,7 +791,7 @@ export const seedDemoPot = createServerFn({ method: "POST" })
     const { data: pot, error } = await db
       .from("pots")
       .insert({
-        slug, admin_token, is_demo: true, demo_speed: true, demo_factor: DEMO_FACTOR,
+        slug, admin_token, is_demo: true, demo_speed: true, demo_factor: DEMO_STORY_FACTOR,
         recipient_name: "Priya", occasion: "leaving", closeness: "colleague",
         likes: ["cooking", "ceramics", "coffee"], dislikes: ["scented things"],
         mode: "pot_first", target_amount: 120, currency: DEFAULT_CURRENCY, expected_count: 12, vote_window: "1h",
@@ -806,9 +807,7 @@ export const seedDemoPot = createServerFn({ method: "POST" })
     }
     await logEvent(pot.id, "pot_created", "Alex just set up a kitty for Priya's leaving do. I'm on it.");
     await logEvent(pot.id, "profile_learned", "Noted: Priya loves cooking, ceramics and coffee. I'll steer clear of scented things.");
-    await insertSeeds(pot.id);
-    const { runAgent } = await import("./agent.server");
-    await runAgent(pot.id, { kind: "manual" });
+    await logEvent(pot.id, "demo_seeded", "This is a demo story. Over the next few minutes nine people chip in, some vote, and I buy the gift. They're demo holds, so nobody is ever charged.");
     return { slug: pot.slug, adminToken: pot.admin_token };
   });
 
@@ -835,14 +834,11 @@ export const resetDemoPot = createServerFn({ method: "POST" })
     const created = new Date();
     await db.from("pots").update({
       status: "collecting", created_at: created.toISOString(), deadline_at: new Date(created.getTime() + 2 * 86400_000).toISOString(),
-      demo_speed: true, closed_at: null, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null,
+      demo_speed: true, demo_factor: DEMO_STORY_FACTOR, closed_at: null, vote_closes_at: null, vote_candidate_ids: [], close_search_at: null,
       last_search_band: 0, last_top_categories: [], agent_lock_at: null, agent_pending: false, agent_working: null,
       tick_lock_at: null, reminder_drafted_at: null,
     }).eq("id", pot.id);
     await logEvent(pot.id, "demo_reset", `Fresh start.${released ? ` I released ${released} real sandbox hold${released === 1 ? "" : "s"} first, and nobody was charged.` : ""}`);
-    await insertSeeds(pot.id);
-    const { runAgent } = await import("./agent.server");
-    await runAgent(pot.id, { kind: "manual" });
     return { released };
   });
 
@@ -872,4 +868,51 @@ export const lookupProductUrl = createServerFn({ method: "POST" })
     // Lookup has no country setting, so a shop may answer in another currency; never fill a price we can't use.
     if (offer.currency !== DEFAULT_CURRENCY) return { ok: false as const, reason: "not_found" };
     return { ok: true as const, product: { title: p.title, image_url: p.image, retailer: offer.domain, price: offer.price, offer_url: offer.url, channel3_product_id: p.id } };
+  });
+
+// ---------- guided demo story ----------
+/** Plays the next beat of the demo story. Idempotent: each call does at most one step, and the closer does the rest. */
+export const advanceDemo = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100), skip: z.boolean().optional() }).parse(d))
+  .handler(async ({ data }) => {
+    const pot = await requireDemo(data.slug, data.adminToken);
+    const db = await admin();
+    const { data: rows } = await db.from("contributions").select("id, created_at").eq("pot_id", pot.id).eq("is_seeded", true).order("created_at", { ascending: true });
+    const chipped = rows?.length ?? 0;
+    const { tickPot } = await import("./closing.server");
+    if (pot.status === "collecting" && chipped < DEMO_CAST.length) {
+      const last = rows?.[chipped - 1];
+      const due = data.skip || !last || Date.now() - new Date(last.created_at).getTime() >= DEMO_GAP_MS;
+      if (due) {
+        const p = DEMO_CAST[chipped]!;
+        const { data: c } = await db.from("contributions").insert({ pot_id: pot.id, display_name: p.name, visibility: p.visibility, amount: p.amount, status: "authorized", is_seeded: true }).select("id").single();
+        if (c) {
+          if (p.message) await db.from("card_signatures").insert({ pot_id: pot.id, contribution_id: c.id, name: p.name || "Someone", message: p.message });
+          if (p.suggests) await db.from("category_votes").insert({ pot_id: pot.id, contribution_id: c.id, category: p.suggests });
+        }
+        await logEvent(pot.id, "contribution_held", demoLine(p));
+        if (DEMO_SEARCH_AT.includes(chipped + 1)) {
+          const { runAgent } = await import("./agent.server");
+          await runAgent(pot.id, { kind: "manual" });
+        }
+      }
+      return { stage: demoStage("collecting", chipped + (due ? 1 : 0)), chipped: chipped + (due ? 1 : 0), people: DEMO_CAST.length, total: DEMO_TOTAL };
+    }
+    if (pot.status === "voting") {
+      const { count } = await db.from("final_votes").select("id", { count: "exact", head: true }).eq("pot_id", pot.id);
+      const ids: string[] = pot.vote_candidate_ids ?? [];
+      if (!count && ids.length && rows) {
+        const votes = DEMO_CAST.flatMap((p, i) => (p.vote === undefined || !rows[i] ? [] : [{ pot_id: pot.id, contribution_id: rows[i]!.id, candidate_id: ids[Math.min(p.vote, ids.length - 1)]! }]));
+        await db.from("final_votes").insert(votes);
+        await logEvent(pot.id, "vote_cast", `${votes.length} of ${DEMO_CAST.length} people have voted. The other ${DEMO_CAST.length - votes.length} let the group decide.`);
+      }
+      if (data.skip) await db.from("pots").update({ vote_closes_at: new Date().toISOString() }).eq("id", pot.id);
+    }
+    if (pot.status === "veto" && data.skip) {
+      const { currentDecision } = await import("./closing.server");
+      const d = await currentDecision(pot.id);
+      if (d) await db.from("decisions").update({ buy_at: new Date().toISOString() }).eq("id", d.id);
+    }
+    const r = await tickPot(pot.id);
+    return { stage: demoStage(r.status === "busy" ? pot.status : r.status, chipped), chipped, people: DEMO_CAST.length, total: DEMO_TOTAL };
   });
