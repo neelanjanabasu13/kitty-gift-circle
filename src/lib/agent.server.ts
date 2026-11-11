@@ -126,6 +126,11 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
     queries = [...profile.likes, ...top2].slice(0, 4).map((l: string) => `${l} gift`);
   }
   if (!queries.length) queries = ["thoughtful gift"];
+  // Always look beyond the likes' own kind of gift, so the shortlist can show three different kinds.
+  const { giftFamily } = await import("./scoring");
+  const likeFamilies = new Set(profile.likes.map((l: string) => giftFamily(l)));
+  const wider = ["wellbeing gift set", "experience day gift", "book lover gift", "indoor plant gift"].filter((q) => !likeFamilies.has(giftFamily(q.split(" ")[0])));
+  queries = [...queries.slice(0, 4), ...wider.slice(0, 2)];
   await say(potId, "planned", `I've got ${queries.length} ideas to try, based on ${(profile.likes.slice(0, 2).join(" and ") || "what I know")}.`, { queries });
 
   const topic = profile.likes[0] ?? top2[0] ?? "thoughtful";

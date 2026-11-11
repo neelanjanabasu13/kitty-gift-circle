@@ -78,22 +78,30 @@ export function topCategories(tally: Record<string, number>, n = 2) {
   return Object.entries(tally).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([k]) => k);
 }
 
+/** Categories that read as the same kind of gift on screen (a mug and a baking dish are both tableware). */
+const FAMILY: Record<string, string> = { cooking: "kitchen", ceramics: "kitchen", coffee: "kitchen", tea: "kitchen", baking: "kitchen", kitchen: "kitchen", tableware: "kitchen" };
+export function giftFamily(category: string | null | undefined) {
+  const c = (category ?? "other").toLowerCase();
+  return FAMILY[c] ?? c;
+}
+
 /**
  * Hard rules first (above pot dropped, fit < MIN_FIT never shown), then weighted ranking.
- * Top 3 must span 2+ categories unless votes are unanimous.
+ * The top 3 are three different kinds of gift whenever the results allow it, unless votes are unanimous.
  */
 export function rank(cands: Scored[], pot: number, tally: Record<string, number>) {
   const eligible = cands.filter((c) => c.price <= pot && c.fit >= MIN_FIT);
   const sorted = eligible.map((c) => ({ ...c, total: totalScore(c, pot, tally) })).sort((a, b) => b.total - a.total || a.price - b.price);
   if (sorted.length >= 3 && !isUnanimous(tally)) {
-    const top = sorted.slice(0, 3);
-    if (new Set(top.map((c) => c.category)).size < 2) {
-      const altIdx = sorted.findIndex((c, i) => i >= 3 && c.category !== top[0]!.category);
-      if (altIdx > 0) {
-        const [alt] = sorted.splice(altIdx, 1);
-        sorted.splice(2, 0, alt!);
-      }
+    const top: typeof sorted = [];
+    const seen = new Set<string>();
+    for (const c of sorted) {
+      if (top.length === 3) break;
+      if (!seen.has(giftFamily(c.category))) { top.push(c); seen.add(giftFamily(c.category)); }
     }
+    for (const c of sorted) { if (top.length === 3) break; if (!top.includes(c)) top.push(c); }
+    const rest = sorted.filter((c) => !top.includes(c));
+    return [...top, ...rest].map((c, i) => ({ ...c, rank: i + 1 }));
   }
   return sorted.map((c, i) => ({ ...c, rank: i + 1 }));
 }

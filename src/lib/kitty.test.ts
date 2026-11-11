@@ -58,6 +58,10 @@ describe("agent scorer", () => {
     const r = rank([cand("a", 130, "cooking", 0.9), cand("b", 90, "cooking", 0.39), cand("c", 90, "books", 0.7)], 112, {});
     expect(r.map((x) => x.id)).toEqual(["c"]);
   });
+  it("top 3 are three different kinds of gift; a mug and a baking dish count as the same kind", () => {
+    const list = [cand("a", 100, "cooking", 0.95), cand("b", 100, "ceramics", 0.9), cand("c", 100, "coffee", 0.85), cand("d", 100, "books", 0.6), cand("e", 100, "wellbeing", 0.55)];
+    expect(rank(list, 112, { cooking: 2, books: 1 }).slice(0, 3).map((x) => x.id)).toEqual(["a", "d", "e"]);
+  });
   it("top 3 spans 2+ categories unless votes are unanimous", () => {
     const list = [cand("a", 100, "cooking", 0.95), cand("b", 100, "cooking", 0.9), cand("c", 100, "cooking", 0.85), cand("d", 100, "books", 0.6)];
     expect(new Set(rank(list, 112, { cooking: 2, books: 1 }).slice(0, 3).map((x) => x.category)).size).toBe(2);
