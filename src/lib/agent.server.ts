@@ -60,6 +60,9 @@ async function runOnce(potId: string, trigger: Trigger) {
   const db = await admin();
   const { data: pot } = await db.from("pots").select("*").eq("id", potId).single();
   if (!pot || pot.status !== "collecting") return;
+  // Shortlist locks at the deadline: no more re-ranks or searches until the closer's single final search.
+  const { effectiveDeadline } = await import("./closing");
+  if (effectiveDeadline(new Date(pot.created_at), new Date(pot.deadline_at), pot).getTime() <= Date.now()) return;
   // Fixed split: the organiser already chose the gift, so there's nothing to search or rank.
   if (pot.mode === "fixed_split") return;
 

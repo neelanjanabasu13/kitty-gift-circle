@@ -16,11 +16,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Kitty: the group gift that buys itself" },
-      { name: "description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
+      { name: "description", content: "Everyone chips in with a PayPal hold. Kitty finds the gift, and nobody pays unless it happens." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { property: "og:title", content: "Kitty: the group gift that buys itself" },
-      { property: "og:description", content: "Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens." },
+      { property: "og:description", content: "Everyone chips in with a PayPal hold. Kitty finds the gift, and nobody pays unless it happens." },
     ],
   }),
   component: Landing,
@@ -45,8 +45,9 @@ function Landing() {
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-[44px] md:text-[72px]">
             The group gift that <em>buys itself</em>.
           </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
-            Everyone chips in with a PayPal hold. Kitty finds a gift that fits, buys it, and nobody pays unless it happens.
+          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 }} className="mt-4 font-display text-[26px] italic md:text-[32px]">Chip in. Gift sorted.</motion.p>
+          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }} className="mx-auto mt-4 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
+            Everyone chips in with a PayPal hold. Kitty finds the gift, and nobody pays unless it happens.
           </motion.p>
           <motion.form onSubmit={go} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="mx-auto mt-10 flex h-14 max-w-lg items-center gap-2 rounded-full border bg-card pr-1.5 pl-6 shadow-bar focus-within:border-foreground/30">
             <label htmlFor="who" className="sr-only">Who's the gift for?</label>

@@ -59,15 +59,19 @@ export async function scoreCandidates(p: Profile, categories: string[], items: {
 }
 
 /** One warm why-line for the veto screen. Falls back to plain facts if AI is unavailable. */
-export async function explainChoice(o: { name: string; likes: string[]; title: string; retailer: string | null; votes: number; voters: number; reason: string | null }): Promise<string> {
-  const fallback = `${o.votes ? `${o.votes} of ${o.voters} voted for it. ` : ""}${o.reason ?? `It fits what ${o.name} is into.`}${o.retailer ? ` In stock at ${o.retailer}.` : ""}`;
+export async function explainChoice(o: { name: string; likes: string[]; title: string; retailer: string | null; votes: number; voted: number; contributors: number; reason: string | null }): Promise<string> {
+  // The vote count is plain code so it's always exact; AI only writes the warm part.
+  const { votePhrase } = await import("./closing");
+  const lead = votePhrase(o.votes, o.voted, o.contributors);
+  const pre = lead ? `${lead} ` : "";
+  const fallback = `${pre}${o.reason ?? `It fits what ${o.name} is into.`}${o.retailer ? ` In stock at ${o.retailer}.` : ""}`;
   try {
     const out = await askJson<{ why: string }>(
-      'Write ONE warm, plain-English line (under 150 characters, UK spelling, no em dashes) explaining why this group gift was chosen. Mention the vote count if any voted, one of the recipient\'s likes, and the shop. Return JSON {"why": string}. Example: "8 of 12 voted for it. It fits her cooking and cast-iron likes, and it\'s in stock at John Lewis."',
-      JSON.stringify(o),
+      'Write ONE warm, plain-English line (under 150 characters, UK spelling, no em dashes) explaining why this group gift was chosen. Do NOT mention votes or numbers. Mention one of the recipient\'s likes and the shop. Return JSON {"why": string}. Example: "It fits her cooking and cast-iron likes, and it\'s in stock at John Lewis."',
+      JSON.stringify({ name: o.name, likes: o.likes, title: o.title, retailer: o.retailer, reason: o.reason }),
     );
     const w = String(out.why ?? "").replace(/\u2014/g, ",").trim();
-    return w ? w.slice(0, 200) : fallback;
+    return w ? `${pre}${w.slice(0, 160)}` : fallback;
   } catch {
     return fallback;
   }

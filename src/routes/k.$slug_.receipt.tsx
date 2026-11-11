@@ -56,6 +56,7 @@ function ReceiptPage() {
             <Receipt
               recipient={pot.recipient_name}
               item={receipt.gift.title}
+              image={receipt.gift.image_url}
               retailer={receipt.gift.retailer}
               currency={pot.currency}
               price={receipt.paid || receipt.gift.price}

@@ -154,6 +154,30 @@ export function afterCapture<T extends { id: string; price: number }>(captured: 
   return to ? { kind: "swap", to } : { kind: "refund" };
 }
 
+/**
+ * Re-split after a failed capture: spread the shortfall over the holds that were captured, in
+ * proportion to what each held (largest-remainder pennies), never taking more than anyone held.
+ * Returns the extra each must pay, or null if their holds can't cover the shortfall.
+ */
+export function resplit(rows: { id: string; held: number; paid: number }[], shortfall: number): { id: string; extra: number }[] | null {
+  let left = cents(shortfall);
+  const room = new Map(rows.map((r) => [r.id, Math.max(0, cents(r.held) - cents(r.paid))]));
+  const extra = new Map(rows.map((r) => [r.id, 0]));
+  if (left <= 0) return [];
+  if ([...room.values()].reduce((a, b) => a + b, 0) < left) return null;
+  while (left > 0) {
+    const open = rows.filter((r) => room.get(r.id)! > 0);
+    const parts = splitPence(open.map((r) => cents(r.held)), left);
+    open.forEach((r, i) => {
+      const take = Math.min(parts[i]!, room.get(r.id)!);
+      room.set(r.id, room.get(r.id)! - take);
+      extra.set(r.id, extra.get(r.id)! + take);
+      left -= take;
+    });
+  }
+  return rows.map((r) => ({ id: r.id, extra: extra.get(r.id)! / 100 })).filter((x) => x.extra > 0);
+}
+
 /** A hold past its 3-day honour period but within 29 days can be reauthorised. */
 export function holdAction(o: { status: string; createdAt: Date; honorExpiresAt: Date | null; authExpiresAt: Date | null; now: Date }):
   "ok" | "reauthorize" | "drop" {
@@ -172,4 +196,12 @@ export function clockTime(d: Date) {
   const m = d.getMinutes();
   const hh = h % 12 || 12;
   return `${hh}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
+}
+
+/** The vote part of the why-line, counted against everyone who chipped in, not just voters. */
+export function votePhrase(votes: number, voted: number, contributors: number): string {
+  if (!votes || !voted) return "";
+  const people = Math.max(contributors, voted);
+  if (voted === people) return votes === voted ? "Everyone who chipped in voted for it." : `${votes} of ${people} chipped-in people voted for it.`;
+  return votes === voted ? `${voted} of ${people} chipped-in people voted, and they picked it.` : `${voted} of ${people} chipped-in people voted, and ${votes} picked it.`;
 }

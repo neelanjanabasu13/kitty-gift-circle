@@ -9,7 +9,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
 import { PotLive } from "@/components/kitty/PotLive";
-import { Cancelled } from "@/components/kitty/Stages";
+import { Cancelled, buyLine } from "@/components/kitty/Stages";
+import { MoneyBanner } from "@/components/kitty/MoneyBanner";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { cancelPot, resetDemoPot, runKittyNow, seedDemoPot, setDemoSpeed } from "@/lib/kitty.functions";
 import { CommissionNote } from "@/components/kitty/PickCard";
@@ -126,6 +127,7 @@ function ManagePage() {
           </div>
         </div>
 
+        <MoneyBanner events={data.events} currency={pot.currency} />
         {cancelled && <Cancelled />}
         {pot.status === "done" && data.receipt?.gift && (
           <section className="mx-auto max-w-xl space-y-4 text-center">
@@ -135,7 +137,7 @@ function ManagePage() {
                 ? "This is a demo pot, so no real money was paid out. Demo holds were never sent to PayPal."
                 : data.receipt.payout?.status === "fallback"
                 ? `Would pay out to ${pot.organiser_name} in production. Captured funds are held in Kitty's PayPal account.`
-                : `Tap to buy it at ${data.receipt.gift.retailer ?? "the shop"}.`}
+                : buyLine(data.receipt.gift.retailer)}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {data.receipt.gift.offer_url && <Button asChild variant="ink" size="xl"><a href={data.receipt.gift.offer_url} target="_blank" rel="noreferrer sponsored">Buy it at {data.receipt.gift.retailer ?? "the shop"}</a></Button>}

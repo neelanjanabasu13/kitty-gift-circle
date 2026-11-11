@@ -129,20 +129,64 @@ export function SplitList({ rows, currency, mineId, mine, future = false }: { ro
   );
 }
 
+export const SHARE_LINE = "You're only charged your share of the final cost. The rest of your hold is released.";
+
 export function HowWeSplit({ price, pot, currency }: { price: number; pot: number; currency: string }) {
-  const pct = pot > 0 ? Math.round((price / pot) * 1000) / 10 : 100;
   const same = Math.round(price * 100) >= Math.round(pot * 100);
+  const pct = pot > 0 ? Math.round((price / pot) * 1000) / 10 : 100;
   return (
     <details className="group rounded-[12px] border bg-card px-4 py-3 text-[14px]">
       <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between font-medium">
         How we split it <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
       </summary>
-      <p className="mt-2 text-muted-foreground">
-        {same
-          ? `The gift cost ${formatMoney(price, currency)}, exactly what the pot reached, so everyone pays what they put in.`
-          : `The gift cost ${formatMoney(price, currency)} and the pot reached ${formatMoney(pot, currency)}. Everyone pays the same share of what they put in, about ${pct}%. The rest of each hold is released and never charged.`}
-      </p>
+      <div className="mt-2 space-y-2 text-muted-foreground">
+        <p>{SHARE_LINE}</p>
+        <p>For example, £200 was pledged and the final cost is £160, so everyone pays 80% of their pledge. A £25 pledge pays £20 and £5 is released.</p>
+        {pot > 0 && (
+          <p>
+            {same
+              ? `Here the pot reached ${formatMoney(pot, currency, { exact: true })}, exactly the final cost, so everyone pays what they pledged.`
+              : `Here ${formatMoney(pot, currency, { exact: true })} was pledged and the final cost is ${formatMoney(price, currency, { exact: true })}, so everyone pays about ${pct}% of their pledge.`}
+          </p>
+        )}
+      </div>
     </details>
+  );
+}
+
+/**
+ * "Here's exactly what Kitty will buy": the gift, the shop, delivery, the total and each person's
+ * final charge and release. Channel3 returns no delivery or fee data, so those rows say so plainly.
+ * Reused on the receipt with done=true.
+ */
+export function PurchasePreview({ title, image, retailer, price, currency, delivery, total, split, mineId, mine, done = false }: {
+  title: string; image?: string | null | undefined; retailer: string | null; price: number; currency: string;
+  delivery?: string | null | undefined; total?: number | null | undefined;
+  split: SplitRow[]; mineId?: string | null | undefined; mine?: { held: number; paid: number | null } | null | undefined; done?: boolean;
+}) {
+  return (
+    <section className="surface space-y-4 p-5 text-left" aria-labelledby="buy-preview">
+      <h3 id="buy-preview" className="font-display text-[26px] leading-tight">{done ? "Here's exactly what Kitty bought" : "Here's exactly what Kitty will buy"}</h3>
+      <div className="flex gap-4">
+        {image ? <img src={image} alt="" width={88} height={88} loading="lazy" className="size-22 shrink-0 rounded-[12px] border bg-card object-cover" /> : null}
+        <div className="min-w-0 space-y-1">
+          <p className="text-[16px] font-medium leading-snug">{title}</p>
+          {retailer && <p className="text-[12px] tracking-wide text-muted-foreground uppercase">{retailer}</p>}
+        </div>
+      </div>
+      <dl className="divide-y border-y text-[14px]">
+        <div className="flex justify-between gap-3 py-2.5"><dt className="text-muted-foreground">Gift</dt><dd className="tabular">{formatMoney(price, currency, { exact: true })}</dd></div>
+        <div className="flex justify-between gap-3 py-2.5"><dt className="text-muted-foreground">Delivery</dt><dd>{delivery ?? "See retailer"}</dd></div>
+        <div className="flex justify-between gap-3 py-2.5"><dt className="text-muted-foreground">Total</dt><dd className="font-medium tabular">{total != null ? formatMoney(total, currency, { exact: true }) : "Price at retailer"}</dd></div>
+      </dl>
+      {split.length > 0 && (
+        <div>
+          <p className="mb-1 text-[13px] text-muted-foreground">{done ? "Who paid what" : "What each person will be charged"}</p>
+          <SplitList rows={split} currency={currency} mineId={mineId} mine={mine} future={!done} />
+        </div>
+      )}
+      <p className="text-[13px] text-muted-foreground">{SHARE_LINE}</p>
+    </section>
   );
 }
 
@@ -167,8 +211,8 @@ export function PayPalDetails({ rows }: { rows: { label: string; value: string |
   );
 }
 
-export function Receipt({ recipient, item, retailer, currency, price, held, released, split, mineId, mine, details, payoutLine, buyUrl, notes }: {
-  recipient: string; item: string; retailer: string | null; currency: string; price: number; held: number; released: number;
+export function Receipt({ recipient, item, image, retailer, currency, price, held, released, split, mineId, mine, details, payoutLine, buyUrl, notes }: {
+  recipient: string; item: string; image?: string | null | undefined; retailer: string | null; currency: string; price: number; held: number; released: number;
   split: SplitRow[]; mineId?: string | null | undefined; mine?: { held: number; paid: number | null } | null | undefined;
   details: { label: string; value: string | null | undefined }[]; payoutLine?: string | null | undefined; buyUrl?: string | null | undefined; notes: { key: string; name: string; message: string }[];
 }) {
@@ -187,10 +231,7 @@ export function Receipt({ recipient, item, retailer, currency, price, held, rele
           <Row k="Gift price" v={<span className="flex items-center gap-2 text-[16px] font-semibold tabular">{formatMoney(price, currency, { exact: true })}<MoneyPill state="paid" /></span>} />
           <Row k="Released back" v={<span className="flex items-center gap-2 tabular">{formatMoney(released, currency, { exact: !Number.isInteger(released) })}<MoneyPill state="released" /></span>} />
         </dl>
-        <div>
-          <p className="mb-1 text-[13px] text-muted-foreground">Who paid what</p>
-          <SplitList rows={split} currency={currency} mineId={mineId} mine={mine} />
-        </div>
+        <PurchasePreview done title={item} image={image} retailer={retailer} price={price} currency={currency} split={split} mineId={mineId} mine={mine} />
         <HowWeSplit price={price} pot={held} currency={currency} />
         {payoutLine && <p className="text-[13px] text-muted-foreground">{payoutLine}</p>}
         <PayPalDetails rows={details} />
@@ -199,11 +240,15 @@ export function Receipt({ recipient, item, retailer, currency, price, held, rele
             <a href={buyUrl} target="_blank" rel="noreferrer sponsored">View the gift{retailer ? ` at ${retailer}` : ""}</a>
           </Button>
         )}
+        <p className="text-[13px] text-muted-foreground">{buyLine(retailer)}</p>
       </div>
       {notes.length > 0 && <CardNotes notes={notes} />}
     </section>
   );
 }
+
+/** Honest buy-step copy: Channel3 gives an offer link, not a checkout, so the organiser finishes the order. */
+export const buyLine = (retailer: string | null | undefined) => `Kitty pays you the exact amount and hands you the buy link. Tap to finish the order at ${retailer ?? "the shop"}.`;
 
 export function CardNotes({ notes }: { notes: { key: string; name: string; message: string }[] }) {
   return (

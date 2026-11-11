@@ -2,7 +2,7 @@
 // Every transition is a conditional update on the current status, so a replayed tick is a no-op.
 // All money maths lives in ./closing (pure, tested); this file only does I/O and narration.
 import { formatMoney } from "./kitty";
-import { afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, effectiveDeadline, isDemoHold, reminderDueAt, type VoteWindow } from "./closing";
+import { resplit, votePhrase, afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, effectiveDeadline, isDemoHold, reminderDueAt, type VoteWindow } from "./closing";
 import { OCCASIONS } from "./config";
 
 const HELD = ["authorized", "reauthorized"];
@@ -162,7 +162,7 @@ export async function voteState(pot: any) {
   const eligible = (live ?? []).filter((c) => !c.final_vote_opt_out).length;
   const tally: Record<string, number> = {};
   for (const v of valid) tally[v.candidate_id!] = (tally[v.candidate_id!] ?? 0) + 1;
-  return { ids, tally, voted: valid.length, eligible };
+  return { ids, tally, voted: valid.length, eligible, contributors: (live ?? []).length };
 }
 
 async function closeVoteIfDue(pot: any, now: Date) {
@@ -173,12 +173,12 @@ async function closeVoteIfDue(pot: any, now: Date) {
   const { winner, nobodyVoted } = pickWinner((cands ?? []).map((c) => ({ ...c, total_score: c.total_score != null ? Number(c.total_score) : null, votes: vs.tally[c.id] ?? 0 })));
   if (!(await transition(pot.id, "voting", { status: "veto" }))) return;
   if (nobodyVoted) await say(pot.id, "vote_closed", "Nobody voted, so Kitty is going with its top pick.");
-  else await say(pot.id, "vote_closed", `The votes are in. The ${short(winner!.title)} won with ${vs.tally[winner!.id]} of ${vs.voted}.`);
+  else await say(pot.id, "vote_closed", `The votes are in. The ${short(winner!.title)} won. ${votePhrase(vs.tally[winner!.id] ?? 0, vs.voted, vs.contributors)}`);
   await startVeto({ ...pot, status: "veto" }, winner, nobodyVoted ? "agent" : "votes", vs);
 }
 
 // ---------- veto ----------
-export async function startVeto(pot: any, pick: any | null, by: "votes" | "agent" | "organiser", vs?: { tally: Record<string, number>; voted: number }, opts: { from?: any } = {}) {
+export async function startVeto(pot: any, pick: any | null, by: "votes" | "agent" | "organiser", vs?: { tally: Record<string, number>; voted: number; contributors?: number }, opts: { from?: any } = {}) {
   const d = await admin();
   if (!pick) pick = (await rankedPicks(pot.id, await heldTotal(pot.id)))[0];
   if (!pick) {
@@ -188,7 +188,7 @@ export async function startVeto(pot: any, pick: any | null, by: "votes" | "agent
   const ms = vetoMs(pot);
   const buyAt = new Date(Date.now() + ms);
   const { explainChoice } = await import("./ai.server");
-  const why = await explainChoice({ name: pot.recipient_name, likes: pot.likes ?? [], title: pick.title, retailer: pick.retailer, votes: vs?.tally[pick.id] ?? 0, voters: vs?.voted ?? 0, reason: pick.reason });
+  const why = await explainChoice({ name: pot.recipient_name, likes: pot.likes ?? [], title: pick.title, retailer: pick.retailer, votes: vs?.tally[pick.id] ?? 0, voted: vs?.voted ?? 0, contributors: vs?.contributors ?? vs?.voted ?? 0, reason: pick.reason });
   const prev = opts.from ?? (await currentDecision(pot.id));
   if (prev) await d.from("decisions").update({ vetoed_at: new Date().toISOString(), swapped_to: pick.id }).eq("id", prev.id).is("vetoed_at", null);
   await d.from("decisions").insert({ pot_id: pot.id, candidate_id: pick.id, buy_at: buyAt.toISOString(), decided_by: by, why, total_seconds: Math.round(ms / 1000) });
@@ -301,10 +301,12 @@ async function buy(pot: any) {
     const { data: holds } = await d.from("contributions").select("id, amount").eq("pot_id", pot.id).in("status", HELD).order("created_at");
     const shares = proRata((holds ?? []).map((h) => ({ id: h.id, amount: Number(h.amount) })), price);
     await Promise.all(shares.map((s) => d.from("contributions").update({ planned_capture: s.share }).eq("id", s.id)));
-    await say(pot.id, "capture_planned", `Everyone pays the same share of what they put in. ${money(price)} across ${shares.length} people, and ${money(Math.round((total - price) * 100) / 100)} goes back.`);
+    await say(pot.id, "capture_planned", `You're only charged your share of the final cost. ${money(price)} across ${shares.length} people, and ${money(Math.round((total - price) * 100) / 100)} of the holds is released.`);
   }
 
   // 4. Capture each planned share (idempotent: 'cap-' + contribution id, skip captured).
+  // Captures are NOT final, so if one fails the others can be topped up before their holds close.
+  // Every hold was already checked with GET in step 2; the rest of each hold is voided in step 6.
   await setWorking(pot.id, `Taking ${money(price)} from the holds...`);
   const { captureAuthorization, voidAuthorization } = await pp();
   const { data: todo } = await d.from("contributions").select("*").eq("pot_id", pot.id).in("status", HELD).not("planned_capture", "is", null);
@@ -318,7 +320,7 @@ async function buy(pot: any) {
       continue;
     }
     try {
-      const cap = await captureAuthorization(c.authorization_id!, share, pot.currency, `cap-${c.id}`);
+      const cap = await captureAuthorization(c.authorization_id!, share, pot.currency, `cap-${c.id}`, false);
       await d.from("contributions").update({ status: "captured", capture_id: cap.id, captured_amount: share }).eq("id", c.id).in("status", HELD);
     } catch (e) {
       console.error("capture failed", c.id, e);
@@ -329,9 +331,28 @@ async function buy(pot: any) {
   }
   if (failures) await say(pot.id, "capture_failed", `${failures} hold${failures === 1 ? "" : "s"} couldn't be taken. Re-totalling what was paid.`);
 
-  // 5. Settle shortfalls.
-  const { data: caps } = await d.from("contributions").select("id, capture_id, captured_amount").eq("pot_id", pot.id).eq("status", "captured");
-  const captured = (caps ?? []).reduce((s, c) => s + Number(c.captured_amount ?? 0), 0);
+  // 5. Settle shortfalls: re-split over the successful holds first, then cheaper pick, then refund.
+  let { data: caps } = await d.from("contributions").select("id, amount, capture_id, captured_amount, authorization_id, is_seeded, topup_capture_id").eq("pot_id", pot.id).eq("status", "captured");
+  let captured = (caps ?? []).reduce((s, c) => s + Number(c.captured_amount ?? 0), 0);
+  if (cents(captured) < cents(price) && (caps ?? []).length) {
+    const extras = resplit((caps ?? []).map((c) => ({ id: c.id, held: Number(c.amount), paid: Number(c.captured_amount ?? 0) })), (cents(price) - cents(captured)) / 100);
+    if (extras) {
+      let topped = 0;
+      for (const x of extras) {
+        const c = caps!.find((r) => r.id === x.id)!;
+        if (c.topup_capture_id) continue; // already topped up on an earlier pass
+        try {
+          let capId: string | null = null;
+          if (!isDemoHold(c)) capId = (await captureAuthorization(c.authorization_id!, x.extra, pot.currency, `cap2-${c.id}`, false)).id;
+          await d.from("contributions").update({ captured_amount: Math.round((Number(c.captured_amount) + x.extra) * 100) / 100, topup_capture_id: capId ?? "demo", topup_amount: x.extra }).eq("id", c.id);
+          topped += x.extra;
+        } catch (e) { console.error("top-up capture failed", c.id, e); }
+      }
+      await say(pot.id, "capture_resplit", `To cover the gap, I took ${money(Math.round(topped * 100) / 100)} more from ${extras.length} of the other holds, in proportion to what each held and never more than anyone held.`);
+      ({ data: caps } = await d.from("contributions").select("id, amount, capture_id, captured_amount, authorization_id, is_seeded, topup_capture_id").eq("pot_id", pot.id).eq("status", "captured"));
+      captured = (caps ?? []).reduce((s, c) => s + Number(c.captured_amount ?? 0), 0);
+    }
+  }
   const fallbacks = (await rankedPicks(pot.id)).filter((c) => c.id !== pick.id).map((c) => ({ ...c, price: Number(c.price) }));
   const plan = afterCapture(captured, price, fallbacks);
   let gift = pick;
@@ -360,7 +381,11 @@ async function buy(pot: any) {
     await say(pot.id, "captured", `${money(price)} paid by ${caps?.length ?? 0} people. Wrapping it up.`);
   }
 
-  // 6. Release holds that weren't needed.
+  // 6. Release holds that weren't needed, and the uncaptured rest of every captured hold.
+  for (const c of caps ?? []) {
+    if (isDemoHold(c) || !c.authorization_id || cents(Number(c.captured_amount)) >= cents(Number(c.amount))) continue;
+    try { await voidAuthorization(c.authorization_id, `void-rest-${c.id}`); } catch (e) { console.error("void rest failed", c.id, e); }
+  }
   const { data: spare } = await d.from("contributions").select("id, authorization_id").eq("pot_id", pot.id).in("status", HELD);
   for (const s of spare ?? []) {
     try { if (s.authorization_id) await voidAuthorization(s.authorization_id, `void-${s.id}`); } catch (e) { console.error("void spare failed", e); }
@@ -447,13 +472,15 @@ async function payout(pot: any, gift: any, price: number) {
 export async function refundAndCancel(pot: any, line: string) {
   const d = await admin();
   const { refundCapture, voidAuthorization } = await pp();
-  const { data: rows } = await d.from("contributions").select("id, status, capture_id, authorization_id").eq("pot_id", pot.id).in("status", [...HELD, "captured"]);
+  const { data: rows } = await d.from("contributions").select("id, status, capture_id, authorization_id, topup_capture_id").eq("pot_id", pot.id).in("status", [...HELD, "captured"]);
   for (const c of rows ?? []) {
     try {
       if (!c.capture_id && !c.authorization_id) {
         await d.from("contributions").update({ status: "voided" }).eq("id", c.id); // demo hold, nothing at PayPal
       } else if (c.status === "captured" && c.capture_id) {
         const r = await refundCapture(c.capture_id, `ref-${c.capture_id}-cancel`);
+        if (c.topup_capture_id && c.topup_capture_id !== "demo") await refundCapture(c.topup_capture_id, `ref-${c.topup_capture_id}-cancel`);
+        if (c.authorization_id) { try { await voidAuthorization(c.authorization_id, `void-rest-${c.id}`); } catch { /* fully captured or already closed */ } }
         await d.from("contributions").update({ status: "refunded", refund_id: r.id }).eq("id", c.id);
       } else if (c.authorization_id) {
         await voidAuthorization(c.authorization_id, `void-${c.id}`);

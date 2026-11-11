@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterCapture, proportionalRefund, splitLines, splitPence, holdAction, isVoteClosed, pickWinner, proRata, releasedAmount, shouldClose, voteClosesAt } from "./closing";
+import { resplit, votePhrase } from "./closing";
 
 const sum = (xs: { share: number }[]) => Math.round(xs.reduce((s, x) => s + x.share * 100, 0)) / 100;
 
@@ -129,5 +130,31 @@ describe("seeded holds", () => {
       { id: "c", is_seeded: false, authorization_id: "AUTH-C" },
     ];
     expect(paypalHolds(rows).map((r) => r.id)).toEqual(["b", "c"]);
+  });
+});
+
+describe("re-split after a failed capture", () => {
+  it("spreads the shortfall over the captured holds by what they held, to the penny", () => {
+    // £100 pot, £80 gift: A held 50 paid 40, B held 30 paid 24, C held 20 (16 failed).
+    const r = resplit([{ id: "a", held: 50, paid: 40 }, { id: "b", held: 30, paid: 24 }], 16)!;
+    expect(r).toEqual([{ id: "a", extra: 10 }, { id: "b", extra: 6 }]);
+    expect(r.reduce((s, x) => s + x.extra, 0)).toBe(16);
+  });
+  it("never takes more than someone held, moving the rest to others", () => {
+    const r = resplit([{ id: "a", held: 10, paid: 9 }, { id: "b", held: 40, paid: 20 }], 6)!;
+    expect(r.find((x) => x.id === "a")!.extra).toBeLessThanOrEqual(1);
+    expect(Math.round(r.reduce((s, x) => s + x.extra, 0) * 100)).toBe(600);
+  });
+  it("returns null when the captured holds can't cover it", () => {
+    expect(resplit([{ id: "a", held: 20, paid: 18 }], 5)).toBeNull();
+  });
+});
+
+describe("why-line vote wording", () => {
+  it("counts votes out of everyone who chipped in", () => {
+    expect(votePhrase(1, 1, 6)).toBe("1 of 6 chipped-in people voted, and they picked it.");
+    expect(votePhrase(2, 3, 6)).toBe("3 of 6 chipped-in people voted, and 2 picked it.");
+    expect(votePhrase(2, 3, 3)).toBe("2 of 3 chipped-in people voted for it.");
+    expect(votePhrase(0, 0, 6)).toBe("");
   });
 });

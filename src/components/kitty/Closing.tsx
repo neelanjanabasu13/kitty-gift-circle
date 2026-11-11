@@ -9,7 +9,7 @@ import { castFinalVote, extendDeadline, getMySplit, getMyVote, organiserDecide, 
 import { formatMoney } from "@/lib/kitty";
 import { clockTime } from "@/lib/closing";
 import { AgentTicker } from "./AgentFeed";
-import { FinalVote, HowWeSplit, SplitList, VetoCountdown } from "./Stages";
+import { FinalVote, HowWeSplit, PurchasePreview, VetoCountdown } from "./Stages";
 import { KittyMascot } from "./KittyMascot";
 import { Chip } from "./Chip";
 
@@ -199,13 +199,10 @@ function VetoStage({ view, mine, adminToken }: { view: PotView; mine?: Mine | nu
         contributorLine={mine ? `Kitty buys at ${at}. Your ${formatMoney(mine.amount, view.pot.currency)} is still only held.` : `Kitty buys at ${at}. Every contribution is still only held.`}
         organiser={adminToken ? { canSwap: alternatives.length > 0, onSwap: () => setDialog("swap"), onVeto: () => setDialog("veto"), onBuyNow: () => act("buy_now") } : undefined}
       >
-        {view.split && (
-          <div className="space-y-3">
-            <p className="text-[15px] font-medium">If it goes ahead</p>
-            <SplitList rows={view.split.lines} currency={view.pot.currency} mineId={mine?.contributionId} mine={mine ? { held: mine.amount, paid: null } : null} future />
-            <HowWeSplit price={view.split.price} pot={view.split.pot} currency={view.pot.currency} />
-          </div>
-        )}
+        <div className="space-y-3">
+          <PurchasePreview title={pick.title} image={pick.image_url} retailer={pick.retailer} price={pick.price} currency={view.pot.currency} split={view.split?.lines ?? []} mineId={mine?.contributionId} mine={mine ? { held: mine.amount, paid: null } : null} />
+          {view.split && <HowWeSplit price={view.split.price} pot={view.split.pot} currency={view.pot.currency} />}
+        </div>
       </VetoCountdown>
       {adminToken && (
         <Dialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>

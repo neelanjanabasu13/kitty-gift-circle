@@ -217,6 +217,8 @@ export type Database = {
           reauth_count: number
           refund_id: string | null
           status: string
+          topup_amount: number | null
+          topup_capture_id: string | null
           visibility: string
         }
         Insert: {
@@ -237,6 +239,8 @@ export type Database = {
           reauth_count?: number
           refund_id?: string | null
           status?: string
+          topup_amount?: number | null
+          topup_capture_id?: string | null
           visibility?: string
         }
         Update: {
@@ -257,6 +261,8 @@ export type Database = {
           reauth_count?: number
           refund_id?: string | null
           status?: string
+          topup_amount?: number | null
+          topup_capture_id?: string | null
           visibility?: string
         }
         Relationships: [

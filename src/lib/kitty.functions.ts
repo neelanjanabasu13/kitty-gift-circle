@@ -384,6 +384,12 @@ export const authorizeContribution = createServerFn({ method: "POST" })
     const { data: c } = await db.from("contributions").select("id, pot_id, amount, status, display_name, visibility, authorization_id").eq("paypal_order_id", data.orderId).maybeSingle();
     if (!c) throw new Error("We couldn't match that PayPal payment to this kitty.");
     if (c.status === "authorized") return { ok: true, amount: Number(c.amount), contributionId: c.id, authorizationId: c.authorization_id };
+    // Late chip-in: an order started before the deadline but approved after it never becomes a hold.
+    const { data: lp } = await db.from("pots").select("status, created_at, deadline_at, demo_speed, demo_factor").eq("id", c.pot_id).single();
+    if (!lp || lp.status !== "collecting" || effectiveDeadline(new Date(lp.created_at), new Date(lp.deadline_at), lp).getTime() < Date.now()) {
+      await db.from("contributions").update({ status: "failed" }).eq("id", c.id);
+      throw new Error("Sorry, this kitty closed before your hold went through. Nothing was taken from your account.");
+    }
 
     const { authorizeOrder, plainPayPalError } = await pp();
     try {
@@ -553,7 +559,10 @@ export const runKittyNow = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100) }).parse(d))
   .handler(async ({ data }) => {
     const pot = await requireAdmin(data.slug, data.adminToken);
-    await logEvent(pot.id, "manual_run", "Taking another look, as asked.");
+    const db = await admin();
+    const { data: full } = await db.from("pots").select("status, created_at, deadline_at, demo_speed, demo_factor").eq("id", pot.id).single();
+    const locked = !full || full.status !== "collecting" || effectiveDeadline(new Date(full.created_at), new Date(full.deadline_at), full).getTime() <= Date.now();
+    if (!locked) await logEvent(pot.id, "manual_run", "Taking another look, as asked.");
     const { runAgent } = await agent();
     const r = await runAgent(pot.id, { kind: "manual" });
     const { tickPot: tick } = await closing();

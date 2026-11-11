@@ -1,0 +1,1 @@
+ALTER TABLE public.contributions ADD COLUMN IF NOT EXISTS topup_capture_id text, ADD COLUMN IF NOT EXISTS topup_amount numeric;

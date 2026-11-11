@@ -102,11 +102,12 @@ export function reauthorize(id: string, amount: number, currency: string, reques
   });
 }
 
-export function captureAuthorization(id: string, amount: number, currency: string, requestId: string) {
+/** final=false leaves the rest of the hold open so a re-split can top up; Kitty voids the remainder afterwards. */
+export function captureAuthorization(id: string, amount: number, currency: string, requestId: string, final = true) {
   return paypal<{ id: string; status: string }>(`/v2/payments/authorizations/${id}/capture`, {
     method: "POST",
     requestId,
-    body: { amount: amt(amount, currency), final_capture: true },
+    body: { amount: amt(amount, currency), final_capture: final },
   });
 }
 

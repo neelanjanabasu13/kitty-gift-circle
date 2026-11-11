@@ -70,9 +70,11 @@ The top 3 must span at least 2 categories unless the votes are unanimous.
 
 ## The surplus rule
 
-If the pot is bigger than the gift, everyone pays the same share of what they put in, and the rest of each hold is released and never charged.
+You're only charged your share of the final cost. The rest of your hold is released.
 
-Worked example: the pot reaches **£122** and the gift costs **£118**. Everyone pays 118 / 122, about 96.7%, of their hold. Someone who held £20 pays £19.34 and gets £0.66 released; someone who held £10 pays £9.67. Shares are worked out in pence with the largest-remainder method (floor every share, then hand leftover pennies to the largest remainders), so the captures add up to exactly £118.00. Any later refund uses the same proportions.
+Worked example: £200 was pledged and the final cost is £160, so everyone pays 80% of their pledge. A £25 pledge pays £20 and £5 is released. Shares are worked out in pence with the largest-remainder method (floor every share, then hand leftover pennies to the largest remainders), so the captures add up to exactly the final cost. Any later refund uses the same proportions.
+
+If one capture fails, Kitty first re-splits the gap over the holds that were captured, in proportion to what each held and never more than anyone held. Captures are made with `final_capture: false` so a top-up capture is still possible, and the uncaptured rest of every hold is voided afterwards. If the other holds can't cover it, Kitty switches to the best cheaper pick the captured money covers and refunds the excess in proportion; otherwise it refunds everyone. The organiser sees an agent line and a banner in every case.
 
 ## Real vs seeded
 
@@ -82,7 +84,7 @@ Worked example: the pot reaches **£122** and the gift costs **£118**. Everyone
 | Seeded contributions | Marked `is_seeded`, tagged "demo", never sent to PayPal unless they carry a real sandbox authorization |
 | Gift picks | Live from Channel3 |
 | Capture, void, refund and payout | Real sandbox calls (demo holds are skipped; a pot with demo money records a demo payout) |
-| Buying from the shop | Done by the organiser through the buy link |
+| Buying from the shop | Kitty pays the organiser the exact amount and hands over the buy link. The retailer checkout step is completed via the retailer link because Channel3 checkout is not yet available (its API returns offer links, not orders). |
 | Time | Real time, or demo speed (60x) shown with a "Demo speed" badge on every pot screen |
 
 Start the demo pot from `/health`. See `scripts/seed-sandbox.md` for turning seeded holds into real sandbox holds.
