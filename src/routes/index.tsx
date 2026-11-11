@@ -5,9 +5,8 @@ import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PayPalWordmark, TopBar } from "@/components/kitty/Logo";
 import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
-import type { MascotState } from "@/components/kitty/KittyMascot";
+import { KittyMascot, type MascotState } from "@/components/kitty/KittyMascot";
 import { PotMeter } from "@/components/kitty/PotMeter";
-import { HeroShop } from "@/components/kitty/HeroShop";
 import { PickCard } from "@/components/kitty/PickCard";
 import { seedDemoPot } from "@/lib/kitty.functions";
 
@@ -40,7 +39,7 @@ function Landing() {
 
       <main>
         <section className="mx-auto max-w-3xl px-5 pt-8 pb-14 text-center md:pt-14">
-          <HeroShop className="mb-6" />
+          <KittyMascot state={SCRIPT[step]!.mascot} fill={SCRIPT[step]!.raised / 120} size={240} className="mx-auto mb-4 block" />
           <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-[44px] md:text-[72px]">
             The group gift that <em>buys itself</em>.
           </motion.h1>
