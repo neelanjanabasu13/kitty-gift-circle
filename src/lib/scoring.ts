@@ -124,16 +124,30 @@ export type CleanResult = {
   dropped: { dislike: number; dislikeWord: string | null; abovePot: number; suspicious: number; duplicate: number };
 };
 
-export function cleanProducts(products: Product[], dislikes: string[], pot: number): CleanResult {
+const FOREIGN_TLD = /\.(ie|de|fr|ch|au|nl|es|it|ca|at|be|se|dk|no|pl|nz|jp|us)$/;
+const FOREIGN_SUB = /^(de|fr|ch|au|nl|es|it|ca|at|be|se|dk|us|eu|ie|nz|jp)\./;
+/** True when an offer's shop is clearly another country's storefront (seen live: de.peugeot-saveurs.com, next.ie). */
+export function isForeignShop(domain: string, country: "GB" | "US"): boolean {
+  const d = domain.toLowerCase().replace(/^www\./, "");
+  if (country === "GB") return FOREIGN_TLD.test(d) || FOREIGN_SUB.test(d) || /\.com\.au$/.test(d);
+  return /\.(co\.uk|uk|ie|de|fr|ch|au|nl|es|it|ca)$/.test(d) || /^(uk|de|fr|ch|au|nl|es|it|ca|eu)\./.test(d);
+}
+const titleKey = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function cleanProducts(products: Product[], dislikes: string[], pot: number, market?: { country: "GB" | "US"; currency: string }): CleanResult {
   const seen = new Set<string>();
   const dropped: CleanResult["dropped"] = { dislike: 0, dislikeWord: null, abovePot: 0, suspicious: 0, duplicate: 0 };
   const kept: CleanResult["kept"] = [];
   for (const p of products) {
-    if (seen.has(p.id)) { dropped.duplicate++; continue; }
-    seen.add(p.id);
+    const tk = `t:${titleKey(p.title)}`;
+    if (seen.has(p.id) || seen.has(tk)) { dropped.duplicate++; continue; }
+    seen.add(p.id); seen.add(tk);
     const hit = matchesDislike(`${p.title} ${p.category ?? ""}`, dislikes);
     if (hit) { dropped.dislike++; dropped.dislikeWord ??= hit; continue; }
-    const valid = p.offers.filter((o) => o.price > 0 && !isSuspiciousOffer(o, p.offers));
+    // Only offers in the pot's currency from shops in the pot's country can be compared with the pot.
+    const local = market ? p.offers.filter((o) => o.currency === market.currency && !isForeignShop(o.domain, market.country)) : p.offers;
+    if (!local.length) { dropped.abovePot++; continue; }
+    const valid = local.filter((o) => o.price > 0 && !isSuspiciousOffer(o, local));
     if (valid.length < p.offers.length && valid.length === 0) { dropped.suspicious++; continue; }
     const affordable = valid.filter((o) => o.price <= pot);
     if (!affordable.length) { dropped.abovePot++; continue; }

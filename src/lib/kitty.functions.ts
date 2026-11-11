@@ -860,5 +860,7 @@ export const lookupProductUrl = createServerFn({ method: "POST" })
     try { host = new URL(data.url).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
     const offer = p.offers.find((o) => o.domain === host) ?? p.offers.filter((o) => o.inStock).sort((a, b) => a.price - b.price)[0] ?? p.offers[0];
     if (!offer) return { ok: false as const, reason: "not_found" };
+    // Lookup has no country setting, so a shop may answer in another currency; never fill a price we can't use.
+    if (offer.currency !== DEFAULT_CURRENCY) return { ok: false as const, reason: "not_found" };
     return { ok: true as const, product: { title: p.title, image_url: p.image, retailer: offer.domain, price: offer.price, offer_url: offer.url, channel3_product_id: p.id } };
   });

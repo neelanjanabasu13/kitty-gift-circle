@@ -25,10 +25,13 @@ function mapProduct(raw: any): Product | null {
       return { url: o.url, domain: domain!, price, compareAt: num(o?.price?.compare_at_price), currency: o?.price?.currency ?? MARKET.currency, inStock: /instock/i.test(avail) };
     })
     .filter(Boolean) as Offer[];
-  const img = Array.isArray(raw.images) ? (raw.images[0]?.url ?? raw.images[0] ?? null) : (raw.image_url ?? null);
-  const category = Array.isArray(raw.category) ? raw.category.join(" ") : (raw.category ?? null);
-  const rating = num(raw.ratings?.rating ?? raw.ratings?.average ?? raw.rating);
-  const reviewCount = num(raw.ratings?.count ?? raw.ratings?.review_count ?? raw.review_count) ?? 0;
+  const imgs = Array.isArray(raw.images) ? raw.images : [];
+  const main = imgs.find((i: any) => i?.is_main_image) ?? imgs[0];
+  const img = main?.url ?? null;
+  // Real shape (checked against the live API): category is { slug, title, path[] }, ratings is { value, count }.
+  const category = typeof raw.category === "string" ? raw.category : (raw.category?.title ?? null);
+  const rating = num(raw.ratings?.value);
+  const reviewCount = num(raw.ratings?.count) ?? 0;
   return { id: String(raw.id), title: String(raw.title), image: typeof img === "string" ? img : null, category, rating, reviewCount, offers };
 }
 
@@ -60,19 +63,21 @@ export async function searchProducts(opts: { query: string; potId: string; minPr
   }
 }
 
-/** Look up a single product by its shop URL (for the 'I know what to get' mode, later). */
+/** Look up a single product by its shop URL via POST /v1/lookup, which returns { product }. */
 export async function lookupByUrl(url: string): Promise<{ status: "ok"; product: Product | null } | { status: "not_configured" } | { status: "error"; message: string }> {
   const key = process.env["CHANNEL3_API_KEY"];
   if (!key) return { status: "not_configured" };
   try {
-    const res = await fetch(`${BASE}/enrich`, {
+    const res = await fetch(`${BASE}/lookup`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, realtime_fetch: true }),
     });
     const text = await res.text();
+    if (res.status === 404) return { status: "ok", product: null };
     if (!res.ok) return { status: "error", message: `Lookup failed (${res.status})` };
-    return { status: "ok", product: mapProduct(JSON.parse(text)) };
+    const json = JSON.parse(text);
+    return { status: "ok", product: mapProduct(json.product ?? json) };
   } catch {
     return { status: "error", message: "Lookup is unreachable right now" };
   }
@@ -89,7 +94,7 @@ export async function refreshOffer(o: { productId: string; title: string; retail
   if (!key) return { status: "not_configured" };
   let product: Product | null = null;
   try {
-    const res = await fetch(`${BASE}/products/${encodeURIComponent(o.productId)}`, { headers: { "x-api-key": key, "x-user-id": o.potId } });
+    const res = await fetch(`${BASE}/products/${encodeURIComponent(o.productId)}?country=${MARKET.country}&currency=${MARKET.currency}`, { headers: { "x-api-key": key, "x-user-id": o.potId } });
     if (res.ok) product = mapProduct(await res.json());
   } catch { /* fall through to search */ }
   if (!product) {
@@ -99,8 +104,9 @@ export async function refreshOffer(o: { productId: string; title: string; retail
     product = r.products.find((p) => p.id === o.productId) ?? null;
   }
   if (!product) return { status: "gone" };
-  const same = product.offers.find((x) => x.domain === o.retailer);
-  const best = same && same.inStock ? same : product.offers.filter((x) => x.inStock).sort((a, b) => a.price - b.price)[0] ?? same;
+  const offers = product.offers.filter((x) => x.currency === MARKET.currency);
+  const same = offers.find((x) => x.domain === o.retailer);
+  const best = same && same.inStock ? same : offers.filter((x) => x.inStock).sort((a, b) => a.price - b.price)[0] ?? same;
   if (!best) return { status: "gone" };
   return { status: "ok", price: best.price, inStock: best.inStock, url: best.url };
 }

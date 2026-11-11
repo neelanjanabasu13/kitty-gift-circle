@@ -118,13 +118,14 @@ export function refundCapture(captureId: string, requestId: string, amount?: { v
   });
 }
 
+// Payouts v1 uses { value, currency } for amounts, unlike Orders/Payments v2 which use currency_code.
 export async function createPayout(o: { batchId: string; email: string; amount: number; currency: string; note: string; itemId: string }) {
   const res = await paypal<any>("/v1/payments/payouts", {
     method: "POST",
     requestId: o.batchId,
     body: {
       sender_batch_header: { sender_batch_id: o.batchId, email_subject: "Your Kitty gift money is here", email_message: o.note.slice(0, 255) },
-      items: [{ recipient_type: "EMAIL", receiver: o.email, amount: amt(o.amount, o.currency), note: o.note.slice(0, 4000), sender_item_id: o.itemId }],
+      items: [{ recipient_type: "EMAIL", receiver: o.email, amount: { value: o.amount.toFixed(2), currency: o.currency }, note: o.note.slice(0, 4000), sender_item_id: o.itemId }],
     },
   });
   const batchId = res?.batch_header?.payout_batch_id as string;

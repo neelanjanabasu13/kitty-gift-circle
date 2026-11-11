@@ -28,7 +28,7 @@ describe("kitty rules", () => {
   });
 });
 
-import { bandFor, cleanProducts, potFit, quality, rank, totalScore, voteScore, nextUnlock, type Product, type Scored } from "./scoring";
+import { bandFor, cleanProducts, isForeignShop, potFit, quality, rank, totalScore, voteScore, nextUnlock, type Product, type Scored } from "./scoring";
 
 const sig = { rating: 4.5, reviewCount: 100, offerCount: 2, inStock: true, priceConsistent: true, wishlistMatch: 0 };
 const cand = (id: string, price: number, category: string, fit: number): Scored => ({ id, price, category, fit, signals: sig });
@@ -85,5 +85,28 @@ describe("agent scorer", () => {
   it("next unlock is the cheapest decent gift just above the pot", () => {
     const u = nextUnlock([{ price: 150, fit_score: 0.8 }, { price: 118, fit_score: 0.9 }, { price: 115, fit_score: 0.3 }, { price: 100, fit_score: 0.9 }], 112);
     expect(u?.price).toBe(118);
+  });
+});
+
+describe("shop filters (from the live test run)", () => {
+  const offer = (domain: string, price: number, currency = "GBP") => ({ url: `https://${domain}/x`, domain, price, compareAt: null, currency, inStock: true });
+  const prod = (id: string, title: string, offers: any[]): Product => ({ id, title, image: null, category: null, rating: null, reviewCount: 0, offers });
+  const GB = { country: "GB" as const, currency: "GBP" };
+  it("drops overseas storefronts for a UK pot", () => {
+    expect(isForeignShop("de.peugeot-saveurs.com", "GB")).toBe(true);
+    expect(isForeignShop("next.ie", "GB")).toBe(true);
+    expect(isForeignShop("johnlewis.com", "GB")).toBe(false);
+    expect(isForeignShop("uk.peugeot-saveurs.com", "GB")).toBe(false);
+    const r = cleanProducts([prod("a", "Dish", [offer("de.peugeot-saveurs.com", 40)])], [], 80, GB);
+    expect(r.kept).toHaveLength(0);
+  });
+  it("drops offers in another currency", () => {
+    const r = cleanProducts([prod("a", "Mug", [offer("shop.com", 30, "USD")])], [], 80, GB);
+    expect(r.kept).toHaveLength(0);
+  });
+  it("treats the same title from two listings as a duplicate", () => {
+    const r = cleanProducts([prod("a", "Ultime Rectangular Baking Dish", [offer("hartsofstur.com", 55)]), prod("b", "Ultime rectangular baking dish", [offer("hartsofstur.com", 45)])], [], 80, GB);
+    expect(r.kept).toHaveLength(1);
+    expect(r.dropped.duplicate).toBe(1);
   });
 });

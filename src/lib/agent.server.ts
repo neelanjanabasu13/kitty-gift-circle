@@ -1,5 +1,5 @@
 // Kitty's agent run: plan, search, clean, score, rank, store. Narrates every step to agent_events.
-import { BASE_CATEGORIES } from "./config";
+import { BASE_CATEGORIES, MARKET, SEARCH_BANDS } from "./config";
 import { formatMoney } from "./kitty";
 import { bandFor, cleanProducts, rank, signalsFor, topCategories, type Scored, type Signals } from "./scoring";
 
@@ -127,14 +127,16 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
 
   const topic = profile.likes[0] ?? top2[0] ?? "thoughtful";
   await working(potId, `Looking through shops for ${topic} gifts under ${money(raised)}`);
-  const results = await Promise.all(queries.map((q) => searchProducts({ query: q, potId, minPrice: raised * 0.5, maxPrice: raised, limit: 10 })));
+  // Search a little above the pot too, so a "next unlock" gift exists; ranking still only shows what the pot covers.
+  const stretch = Math.round(Math.max(raised * 1.3, SEARCH_BANDS.find((b) => b > raised) ?? raised * 1.3));
+  const results = await Promise.all(queries.map((q) => searchProducts({ query: q, potId, minPrice: raised * 0.5, maxPrice: stretch, limit: 10 })));
   const failed = results.filter((r) => r.status === "error").length;
   const products = results.flatMap((r) => (r.status === "ok" ? r.products : []));
   const domains = new Set(products.flatMap((p) => p.offers.map((o) => o.domain)));
   await say(potId, "searched", `I looked through ${domains.size || queries.length} shops for ${topic} gifts under ${money(raised)}.${failed ? ` ${failed} search${failed === 1 ? "" : "es"} didn't come back.` : ""}`, { found: products.length });
   if (!products.length) return failed < results.length;
 
-  const { kept, dropped } = cleanProducts(products, profile.dislikes, raised);
+  const { kept, dropped } = cleanProducts(products, profile.dislikes, stretch, { country: MARKET.country, currency: pot.currency ?? MARKET.currency });
   if (dropped.dislike) await say(potId, "dropped", `Left out ${dropped.dislike} ${dropped.dislikeWord ?? ""} thing${dropped.dislike === 1 ? "" : "s"}. ${pot.recipient_name} isn't a fan.`.replace("  ", " "));
   if (dropped.suspicious) await say(potId, "dropped", `Skipped ${dropped.suspicious} deal${dropped.suspicious === 1 ? "" : "s"} that looked too good to be true.`);
 
