@@ -48,6 +48,14 @@ export function sceneStart(index: number) {
   return SCENES.slice(0, index).reduce((s, x) => s + x.ms, 0);
 }
 
+export const DEMO_BOW_SNAP_MS = sceneStart(SCENES.findIndex((s) => s.id === "ribbon")) + 900;
+
+/** Confetti belongs to the bow cue, never to the thank-you or receipt scenes. */
+export function demoConfettiCue(elapsed: number, fired: boolean) {
+  return !fired && elapsed >= DEMO_BOW_SNAP_MS && sceneAt(elapsed)?.scene.id === "ribbon"
+    ? DEMO_BOW_SNAP_MS : null;
+}
+
 /** Running pot total after each chip-in. */
 export const RUNNING = DEMO_CAST.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? 0) + p.amount], []);
 /** Pot after the chip-ins that triggered the £50 and £100 searches. */

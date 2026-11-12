@@ -12,7 +12,7 @@ import { DEMO_CAST, DEMO_TARGET, DEMO_TOTAL, type DemoPerson } from "@/lib/demoS
 import type { DemoPick } from "@/lib/demoPicks";
 import {
   CHIP_GAP_MS, CHIP_LEAD_MS, DEMO_ACTS, DEMO_TOTAL_MS, POT_AT_100, POT_AT_50, RUNNING, SCENES, type SceneId,
-  demoSplit, finalOrder, nextUnlock, orderAt100, orderAt50, sceneAt, sceneStart, voteTally,
+  DEMO_BOW_SNAP_MS, demoConfettiCue, demoSplit, finalOrder, nextUnlock, orderAt100, orderAt50, sceneAt, sceneStart, voteTally,
 } from "@/lib/demoTimeline";
 
 const GBP = "GBP";
@@ -32,7 +32,22 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const mascotRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const confettiFired = useRef(false);
+  const [confettiStart, setConfettiStart] = useState<number | null>(null);
   const ended = elapsed >= DEMO_TOTAL_MS;
+
+  useEffect(() => {
+    if (elapsed < DEMO_BOW_SNAP_MS) {
+      confettiFired.current = false;
+      setConfettiStart(null);
+      return;
+    }
+    const cue = demoConfettiCue(elapsed, confettiFired.current);
+    if (cue !== null) {
+      confettiFired.current = true;
+      setConfettiStart(cue);
+    }
+  }, [elapsed]);
 
   useEffect(() => {
     if (!playing || ended) return;
@@ -73,6 +88,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
             <>
               <div ref={mascotRef} className={at?.scene.id === "ribbon" ? "flex justify-center" : "flex justify-center md:justify-start"}>
                 <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
+                  confettiMs={confettiStart === null ? false : elapsed - confettiStart}
                   externalRelease items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
               </div>
               <div className={at?.scene.id === "ribbon" ? "min-w-0 md:col-span-2" : "min-w-0"}>
@@ -530,7 +546,7 @@ function ReceiptScene({ pick }: { pick: DemoPick }) {
 function EndScreen({ onAgain }: { onAgain: () => void }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-xl space-y-6 text-center">
-      <KittyMascot state="done" fill={1} size={160} className="mx-auto block" />
+      <KittyMascot state="done" confettiMs={false} fill={1} size={160} className="mx-auto block" />
       <h1 className="text-[40px] md:text-[56px]">Gift sorted. <em>Nobody fronted a penny.</em></h1>
       <div className="flex flex-wrap justify-center gap-2">
         <Button variant="quiet" size="tap" onClick={onAgain}><RotateCcw /> Watch again</Button>

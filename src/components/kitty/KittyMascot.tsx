@@ -137,11 +137,11 @@ const TAIL = {
   high: "M66 160 C40 150 34 120 44 98 C52 80 46 66 34 60",
 };
 
-export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false, items, externalRelease = false }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean; items?: string[]; externalRelease?: boolean }) {
-  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} items={items} externalRelease={externalRelease} />;
+export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false, items, externalRelease = false, confettiMs }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean; items?: string[]; externalRelease?: boolean; confettiMs?: number | false }) {
+  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} items={items} externalRelease={externalRelease} confettiMs={confettiMs} />;
 }
 
-function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink, items, externalRelease }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean; items: string[] | undefined; externalRelease: boolean }) {
+function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink, items, externalRelease, confettiMs }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean; items: string[] | undefined; externalRelease: boolean; confettiMs: number | false | undefined }) {
   const reduce = !!useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const grad = `rb-${uid}`;
@@ -384,8 +384,9 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             <path d="M104.5 124.5 H113.5 V131.5 H104.5 Z" fill={`url(#${grad})`} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
           </motion.g>
 
-          {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
-          {s === "buying" && !reduce && <Suspense fallback={null}><Confetti once ms={clockMs - 900} colors={[...PAYPAL_BLUES, KRAFT, INK]} /></Suspense>}
+          {confettiMs === undefined && s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
+          {confettiMs === undefined && s === "buying" && !reduce && <Suspense fallback={null}><Confetti once ms={clockMs - 900} colors={[...PAYPAL_BLUES, KRAFT, INK]} /></Suspense>}
+          {typeof confettiMs === "number" && !reduce && <Suspense fallback={null}><Confetti once ms={confettiMs} colors={[...PAYPAL_BLUES, KRAFT, INK]} /></Suspense>}
         </motion.svg>
       </AnimatePresence>
     </span>

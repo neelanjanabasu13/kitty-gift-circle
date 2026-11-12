@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { CHIP_GAP_MS, CHIP_LEAD_MS, DEMO_ACTS, DEMO_TOTAL_MS, SCENES, demoSplit, finalOrder, sceneAt, sceneStart, voteTally } from "./demoTimeline";
+import { CHIP_GAP_MS, CHIP_LEAD_MS, DEMO_ACTS, DEMO_TOTAL_MS, DEMO_BOW_SNAP_MS, SCENES, demoConfettiCue, demoSplit, finalOrder, sceneAt, sceneStart, voteTally } from "./demoTimeline";
 import { DEMO_HOME_PICKS } from "./demoPicks";
 
 describe("demo stage timeline", () => {
+  it("fires confetti once at the bow, never again on the card or receipt", () => {
+    let fired = false;
+    const cues: number[] = [];
+    for (let elapsed = 0; elapsed < DEMO_TOTAL_MS; elapsed += 100) {
+      const cue = demoConfettiCue(elapsed, fired);
+      if (cue !== null) { fired = true; cues.push(cue); }
+    }
+    expect(cues).toEqual([DEMO_BOW_SNAP_MS]);
+    expect(demoConfettiCue(DEMO_BOW_SNAP_MS - 1, false)).toBeNull();
+    for (const id of ["card", "receipt"]) {
+      expect(demoConfettiCue(sceneStart(SCENES.findIndex((s) => s.id === id)), false)).toBeNull();
+    }
+    expect(demoConfettiCue(DEMO_BOW_SNAP_MS, true)).toBeNull();
+    expect(demoConfettiCue(DEMO_BOW_SNAP_MS, false)).toBe(DEMO_BOW_SNAP_MS);
+  });
   it("plays the five acts in order: chip in, shop, vote, split, wrapped", () => {
     const acts = SCENES.map((s) => s.act).filter((a, i, all) => all.indexOf(a) === i);
     expect(acts).toEqual(["chip", "shop", "vote", "split", "wrapped"]);
