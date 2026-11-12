@@ -3,9 +3,9 @@ import { generateChatCompletion } from "@lovable.dev/ai-gateway";
 
 const MODEL = "google/gemini-3.8-flash" as const;
 
-async function askJson<T>(system: string, user: string): Promise<T> {
+async function askJson<T>(system: string, user: string, model: string = MODEL): Promise<T> {
   const res = await generateChatCompletion({
-    model: MODEL,
+    model: model as typeof MODEL,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -39,16 +39,20 @@ export async function planQueries(p: Profile): Promise<string[]> {
 
 export type AiScore = { id: string; fit: number; reason: string; category: string; dislike: boolean };
 
-export async function scoreCandidates(p: Profile, categories: string[], items: { id: string; title: string; category: string | null; price: number; retailer: string }[]): Promise<AiScore[]> {
+/** One batched, compact scoring call on the fast model. Throws "timeout" after `timeoutMs` so callers keep provisional picks. */
+export async function scoreCandidates(p: Profile, categories: string[], items: { id: string; title: string; category: string | null; price: number }[], timeoutMs = 8000): Promise<AiScore[]> {
   if (!items.length) return [];
-  const out = await askJson<{ items: AiScore[] }>(
+  const compact = items.map((i) => ({ id: i.id, title: i.title.slice(0, 90), category: i.category, price: i.price }));
+  const call = askJson<{ items: AiScore[] }>(
     `You judge how well each product suits a gift recipient. Return JSON {"items": [{"id", "fit", "reason", "category", "dislike"}]} for every input item.
 - fit: 0..1, how well it suits this specific person (0.4 or below means a poor fit).
 - reason: ONE warm line under 90 characters that names one of their likes, e.g. "She loves cast iron; this is the 24 cm she would use". Use their first name or she/he/they naturally. No em dashes.
 - category: exactly one of ${JSON.stringify(categories)}.
 - dislike: true if it clashes with any dislike.`,
-    JSON.stringify({ recipient: p.name, occasion: p.occasion, relationship: p.closeness, likes: p.likes, dislikes: p.dislikes, wishlist: p.wishlist, items }),
+    JSON.stringify({ recipient: p.name, occasion: p.occasion, relationship: p.closeness, likes: p.likes, dislikes: p.dislikes, items: compact }),
+    "google/gemini-3.1-flash-lite",
   );
+  const out = await Promise.race([call, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), timeoutMs))]);
   return (out.items ?? []).map((s) => ({
     id: String(s.id),
     fit: Math.max(0, Math.min(1, Number(s.fit) || 0)),

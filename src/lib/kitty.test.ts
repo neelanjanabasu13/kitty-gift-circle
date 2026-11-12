@@ -114,3 +114,20 @@ describe("shop filters (from the live test run)", () => {
     expect(r.dropped.duplicate).toBe(1);
   });
 });
+
+import { templateQueries, preselect } from "./scoring";
+describe("fast gift search", () => {
+  it("builds 4 to 6 template queries from 2+ likes, and defers to the AI planner below 2", () => {
+    const q = templateQueries(["cooking", "ceramics", "coffee"], [])!;
+    expect(q.length).toBeGreaterThanOrEqual(4);
+    expect(q.length).toBeLessThanOrEqual(6);
+    expect(q[0]).toBe("cooking gift");
+    expect(templateQueries(["cooking"], [])).toBeNull();
+  });
+  it("sends at most 15 gifts to AI scoring, mixing kinds", () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({ id: String(i), fit: 1 - i / 100, category: i < 20 ? "cooking" : "books" }));
+    const p = preselect(items, 15);
+    expect(p).toHaveLength(15);
+    expect(p.some((x) => x.category === "books")).toBe(true);
+  });
+});

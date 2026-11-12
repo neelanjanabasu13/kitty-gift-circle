@@ -260,27 +260,43 @@ async function buy(pot: any) {
     await setWorking(pot.id, `Checking ${pick.retailer ?? "the shop"} still has the ${short(pick.title)}...`);
     const held = await heldTotal(pot.id);
     const { refreshOffer } = await import("./channel3.server");
-    // Demo pots skip the live recheck (about 40s); real pots always recheck.
+    // Re-check the pick and the next two in parallel (5s each), so a sold-out winner can hand over instantly.
+    const others = (await rankedPicks(pot.id, held)).filter((c) => c.id !== pick.id).slice(0, 2);
+    const check = (c: any) => withTimeout(refreshOffer({ productId: c.channel3_product_id, title: c.title, retailer: c.retailer, potId: pot.id, maxPrice: held }), 5000);
     const tR = Date.now();
-    const r = pick.channel3_product_id && !pot.is_demo
-      ? await refreshOffer({ productId: pick.channel3_product_id, title: pick.title, retailer: pick.retailer, potId: pot.id, maxPrice: held })
-      : ({ status: "not_configured" } as const);
+    // Demo pots skip the live recheck; real pots always recheck.
+    const live = !!pick.channel3_product_id && !pot.is_demo;
+    const results = live ? await Promise.all([pick, ...others].map((c) => (c.channel3_product_id ? check(c) : Promise.resolve(null)))) : [];
     const timings = { refresh: Date.now() - tR };
-    if (r.status === "ok") {
+    const r = live ? results[0] : ({ status: "not_configured" } as const);
+    const fits = (x: any) => x && x.status === "ok" && x.inStock && cents(x.price) <= cents(held);
+    const handOver = async () => {
+      const idx = others.findIndex((_, i) => fits(results[i + 1]));
+      if (idx < 0) return swapToNext(pot, decision, held);
+      const nx = others[idx]!; const nr = results[idx + 1] as any;
+      if (cents(nr.price) !== cents(Number(nx.price))) await d.from("candidates").update({ price: nr.price, offer_url: nr.url, fetched_at: new Date().toISOString() }).eq("id", nx.id);
+      await transition(pot.id, "buying", { status: "veto" });
+      return startVeto({ ...pot, status: "veto" }, { ...nx, price: nr.price }, "agent", undefined, { from: decision });
+    };
+    const fresh = pick.fetched_at && Date.now() - new Date(pick.fetched_at).getTime() < 30 * 60_000;
+    if (r && r.status === "ok") {
       if (!r.inStock || cents(r.price) > cents(held)) {
         await say(pot.id, "prebuy_moved", `${short(pick.title)} ${!r.inStock ? "has sold out" : `went up to ${money(r.price)}`}. Moving to the next pick.`, { timings });
-        return swapToNext(pot, decision, held);
+        return handOver();
       }
       if (cents(r.price) !== cents(price)) {
         await d.from("candidates").update({ price: r.price, offer_url: r.url }).eq("id", pick.id);
         await say(pot.id, "prebuy_price", `Price moved from ${money(price)} to ${money(r.price)}. Still fits.`, { timings });
         price = r.price;
       } else await say(pot.id, "prebuy_ok", `Good news, it's still in stock at ${pick.retailer ?? "the shop"} for ${money(price)}.`, { timings });
-    } else if (r.status === "gone") {
+    } else if (r && r.status === "gone") {
       await say(pot.id, "prebuy_moved", `${short(pick.title)} isn't listed any more. Moving to the next pick.`, { timings });
-      return swapToNext(pot, decision, held);
+      return handOver();
+    } else if (live && !fresh) {
+      await say(pot.id, "prebuy_moved", `Couldn't re-check the ${short(pick.title)} in time, and my last look was a while ago. Moving to the next pick.`, { timings });
+      return handOver();
     } else {
-      await say(pot.id, "prebuy_skip", pot.is_demo ? "This is a demo, so I'm using the price I found earlier." : "Couldn't re-check the shop just now, so I'm going with the price I saw.", { timings });
+      await say(pot.id, "prebuy_skip", pot.is_demo ? "This is a demo, so I'm using the price I found earlier." : "Couldn't re-check the shop just now, but I checked it in the last half hour, so I'm going with that price.", { timings });
     }
 
     // 2. Hold checks.
@@ -564,4 +580,9 @@ async function maybeDraftReminder(pot: any, now: Date) {
   const text = await draftNudge({ name: pot.recipient_name, occasion: occ, missing });
   await d.from("reminders").insert({ pot_id: pot.id, draft_text: text, missing_count: missing });
   await say(pot.id, "reminder_drafted", `I drafted a nudge for the ${missing === 1 ? "1 person who hasn't" : `${missing} people who haven't`} chipped in yet.`);
+}
+
+/** Resolves to null if the promise takes longer than `ms`. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p.catch(() => null), new Promise<null>((res) => setTimeout(() => res(null), ms))]);
 }

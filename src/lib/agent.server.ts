@@ -1,7 +1,7 @@
 // Kitty's agent run: plan, search, clean, score, rank, store. Narrates every step to agent_events.
 import { BASE_CATEGORIES, MARKET, SEARCH_BANDS } from "./config";
 import { formatMoney } from "./kitty";
-import { bandFor, cleanProducts, rank, signalsFor, topCategories, type Scored, type Signals } from "./scoring";
+import { bandFor, cleanProducts, guessCategory, preselect, provisionalFit, rank, signalsFor, templateQueries, topCategories, type Scored, type Signals } from "./scoring";
 
 export type Trigger = { kind: "authorized" | "withdrawn" | "vote" | "replan" | "manual"; who?: string | null };
 
@@ -74,6 +74,7 @@ async function runOnce(potId: string, trigger: Trigger) {
   const tally: Record<string, number> = {};
   for (const v of votes ?? []) if (v.contribution_id && liveIds.has(v.contribution_id)) tally[v.category] = (tally[v.category] ?? 0) + 1;
   const top2 = topCategories(tally);
+  tallyFor.set(potId, tally);
   const cur = pot.currency;
   const money = (n: number) => formatMoney(n, cur);
 
@@ -104,6 +105,8 @@ async function runOnce(potId: string, trigger: Trigger) {
 }
 
 /** Timings from the latest live search per pot, attached to the next "reranked" event. */
+const tallyFor = new Map<string, Record<string, number>>();
+const planCache = new Map<string, string[]>();
 const lastTimings = new Map<string, Record<string, number>>();
 
 async function search(potId: string, pot: any, raised: number, top2: string[], replaceAll: boolean) {
@@ -125,13 +128,18 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
 
   const t0 = Date.now();
   await working(potId, `Thinking about ${(profile.likes.slice(0, 2).join(" and ") || "what they love")}`);
-  let queries: string[];
-  try {
-    queries = await planQueries(profile);
-  } catch (e) {
-    console.error(e);
-    queries = [...profile.likes, ...top2].slice(0, 4).map((l: string) => `${l} gift`);
+  // Plans come from a template when there are 2+ likes (no AI wait), else the AI planner; cached per pot and profile.
+  const planKey = `${potId}|${JSON.stringify([profile.likes, profile.dislikes, top2, profile.occasion])}`;
+  let queries: string[] = planCache.get(planKey) ?? templateQueries(profile.likes, top2) ?? [];
+  if (!queries.length) {
+    try {
+      queries = await planQueries(profile);
+    } catch (e) {
+      console.error(e);
+      queries = [...profile.likes, ...top2].slice(0, 4).map((l: string) => `${l} gift`);
+    }
   }
+  planCache.set(planKey, queries);
   const tPlan = Date.now() - t0;
   if (!queries.length) queries = ["thoughtful gift"];
   // Always look beyond the likes' own kind of gift, so the shortlist can show three different kinds.
@@ -159,39 +167,25 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
   if (dropped.suspicious) await say(potId, "dropped", `Skipped ${dropped.suspicious} deal${dropped.suspicious === 1 ? "" : "s"} that looked too good to be true.`);
 
   const categories = Array.from(new Set([...BASE_CATEGORIES, ...profile.likes.map((l: string) => l.toLowerCase())]));
-  await working(potId, `Weighing up ${kept.length} gifts for ${pot.recipient_name}`);
-  const items = kept.slice(0, 40).map(({ product, offer }) => ({ id: product.id, title: product.title, category: product.category, price: offer.price, retailer: offer.domain }));
-  const tSc = Date.now();
-  const scores = await scoreCandidates(profile, categories, items);
-  const tScore = Date.now() - tSc;
-  const byId = new Map(scores.map((s) => [s.id, s]));
-  const aiDropped = scores.filter((s) => s.dislike).length;
-  if (aiDropped) await say(potId, "dropped", `Left out ${aiDropped} more that ${pot.recipient_name} wouldn't love.`);
-
   const wishText = `${pot.wishlist_url ?? ""}`.replace(/[-_/]/g, " ");
   const bandLabel = String(bandFor(raised));
-  const rows = kept
-    .map(({ product, offer }) => {
-      const s = byId.get(product.id);
-      if (!s || s.dislike) return null;
-      return {
-        pot_id: potId,
-        channel3_product_id: product.id,
-        title: product.title.slice(0, 200),
-        image_url: product.image,
-        offer_url: offer.url,
-        retailer: offer.domain,
-        price: offer.price,
-        currency: offer.currency,
-        category: s.category,
-        fit_score: s.fit,
-        reason: s.reason,
-        band: bandLabel,
-        signals: signalsFor(product, offer, wishText) as any,
-        fetched_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as any[];
+  // 1. Provisional picks straight away from a cheap, deterministic score.
+  const rows = kept.map(({ product, offer }) => ({
+    pot_id: potId,
+    channel3_product_id: product.id,
+    title: product.title.slice(0, 200),
+    image_url: product.image,
+    offer_url: offer.url,
+    retailer: offer.domain,
+    price: offer.price,
+    currency: offer.currency,
+    category: guessCategory(product.title, product.category, categories),
+    fit_score: provisionalFit(product.title, product.category, profile.likes, product.rating, product.reviewCount),
+    reason: `Picked with ${pot.recipient_name}'s love of ${profile.likes[0] ?? "good things"} in mind.`,
+    band: bandLabel,
+    signals: signalsFor(product, offer, wishText) as any,
+    fetched_at: new Date().toISOString(),
+  }));
 
   const tW = Date.now();
   if (replaceAll) await db.from("candidates").delete().eq("pot_id", potId);
@@ -200,30 +194,61 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
   const { data: existing } = await db.from("candidates").select("channel3_product_id").eq("pot_id", potId);
   const have = new Set((existing ?? []).map((e) => e.channel3_product_id));
   const fresh = rows.filter((r) => !have.has(r.channel3_product_id));
-  if (fresh.length) await db.from("candidates").insert(fresh);
-  const timings = { plan: tPlan, search: tSearch, score: tScore, write: Date.now() - tW, total: Date.now() - t0 };
+  const { data: inserted } = fresh.length ? await db.from("candidates").insert(fresh).select("*") : { data: [] as any[] };
+  const tWrite = Date.now() - tW;
+  await rerank(potId, raised, tallyFor.get(potId) ?? {}, { kind: "manual" }, pot.currency, true);
+  const firstPicks = Date.now() - t0;
+  await say(potId, "first_picks", "First picks are in. Fine-tuning...", { timings: { firstPicks } });
+
+  // 2. One fast AI pass over the best 15 (mixed kinds), then overwrite with the final ranking.
+  await working(potId, `Weighing up the best ${Math.min(15, inserted?.length ?? 0)} gifts for ${pot.recipient_name}`);
+  const pool = preselect((inserted ?? []).filter((c: any) => Number(c.price) <= raised).map((c: any) => ({ ...c, fit: Number(c.fit_score) })), 15);
+  const tSc = Date.now();
+  let scores: Awaited<ReturnType<typeof scoreCandidates>> = [];
+  let timedOut = false;
+  try {
+    scores = await scoreCandidates(profile, categories, pool.map((c: any) => ({ id: c.id, title: c.title, category: c.category, price: Number(c.price) })), 8000);
+  } catch (e) {
+    timedOut = true;
+    console.error("scoring skipped", e);
+  }
+  const tScore = Date.now() - tSc;
+  const tW2 = Date.now();
+  const aiDropped = scores.filter((x) => x.dislike);
+  // One write: AI scores for the 15, a slight damp on the rest so scored ones lead, and dislikes removed.
+  const byScore = new Map(scores.map((x) => [x.id, x]));
+  const drop = aiDropped.map((x) => x.id);
+  if (scores.length) {
+    const upd = (inserted ?? []).filter((c: any) => !drop.includes(c.id)).map((c: any) => {
+      const x = byScore.get(c.id);
+      return x ? { ...c, fit_score: x.fit, reason: x.reason, category: x.category } : { ...c, fit_score: Math.round(Number(c.fit_score) * 0.8 * 1000) / 1000 };
+    });
+    await Promise.all([upd.length ? db.from("candidates").upsert(upd) : null, drop.length ? db.from("candidates").delete().in("id", drop) : null]);
+  }
+  if (aiDropped.length) await say(potId, "dropped", `Left out ${aiDropped.length} more that ${pot.recipient_name} wouldn't love.`);
+  if (timedOut) await say(potId, "score_slow", "Fine-tuning took too long, so I'm keeping the first picks for now.");
+  const timings = { plan: tPlan, search: tSearch, firstPicks, score: tScore, write: tWrite + (Date.now() - tW2), total: Date.now() - t0 };
   lastTimings.set(potId, timings);
   if (searchedId) await db.from("agent_events").update({ payload: { found: products.length, timings } as any }).eq("id", searchedId);
   return true;
 }
 
-async function rerank(potId: string, raised: number, tally: Record<string, number>, trigger: Trigger, currency: string) {
+async function rerank(potId: string, raised: number, tally: Record<string, number>, trigger: Trigger, currency: string, quiet = false) {
   const db = await admin();
-  const { data: cands } = await db.from("candidates").select("id, title, price, category, fit_score, signals, rank").eq("pot_id", potId);
+  const { data: cands } = await db.from("candidates").select("*").eq("pot_id", potId);
   if (!cands?.length) return;
   const prevTop = cands.filter((c) => c.rank != null && c.rank <= 3).sort((a, b) => a.rank! - b.rank!).map((c) => c.id);
   const scored: Scored[] = cands.map((c) => ({ id: c.id, price: Number(c.price ?? 0), category: c.category ?? "home", fit: Number(c.fit_score ?? 0), signals: c.signals as unknown as Signals }));
   const ranked = rank(scored, raised, tally);
   const byId = new Map(ranked.map((r) => [r.id, r]));
-  await Promise.all(
-    cands.map((c) => {
-      const r = byId.get(c.id);
-      return db.from("candidates").update({ rank: r ? r.rank : null, total_score: r ? Math.round(r.total * 1000) / 1000 : null }).eq("id", c.id);
-    }),
-  );
+  // One batched write for every candidate's rank and score.
+  await db.from("candidates").upsert(cands.map((c) => {
+    const r = byId.get(c.id);
+    return { ...c, rank: r ? r.rank : null, total_score: r ? Math.round(r.total * 1000) / 1000 : null };
+  }));
   const newTop = ranked.slice(0, 3).map((r) => r.id);
   const changed = newTop.join() !== prevTop.join();
-  if (!changed) return;
+  if (!changed || quiet) return;
   const lead = cands.find((c) => c.id === newTop[0]);
   const leadMoved = newTop[0] !== prevTop[0] && lead;
   const why =

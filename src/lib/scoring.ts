@@ -194,3 +194,41 @@ export function nextUnlock<T extends { price: number | null; fit_score: number |
     .filter((c) => c.price != null && c.price > pot && (c.fit_score ?? 0) >= 0.5)
     .sort((a, b) => (a.price ?? 0) - (b.price ?? 0))[0] ?? null;
 }
+
+// ---------- fast path: deterministic plan and provisional picks ----------
+
+/** Shop queries built from likes and voted categories by template; null means too little to go on (use the AI planner). */
+export function templateQueries(likes: string[], topVoted: string[]): string[] | null {
+  const ls = likes.map((l) => l.trim().toLowerCase()).filter(Boolean);
+  if (ls.length < 2) return null;
+  const seeds = Array.from(new Set([...topVoted.map((v) => v.toLowerCase()), ...ls]));
+  const out: string[] = [];
+  for (const s of seeds) { out.push(`${s} gift`); if (out.length < 6) out.push(`${s} set`); if (out.length >= 6) break; }
+  return Array.from(new Set(out)).slice(0, 6);
+}
+
+/** Cheap guess at a product's gift category: the first category or like named in its title or shop category. */
+export function guessCategory(title: string, shopCategory: string | null, categories: string[]): string {
+  const text = `${title} ${shopCategory ?? ""}`.toLowerCase();
+  return categories.find((c) => text.includes(c.toLowerCase())) ?? (giftFamily(shopCategory) === "kitchen" ? "cooking" : "home");
+}
+
+/** Provisional fit before AI scoring: a like named in the title lifts it; quality nudges it. Always within 0.45..0.85. */
+export function provisionalFit(title: string, shopCategory: string | null, likes: string[], rating: number | null, reviewCount: number): number {
+  const text = `${title} ${shopCategory ?? ""}`.toLowerCase();
+  const match = likes.some((l) => l && text.includes(l.toLowerCase()));
+  return Math.round((0.45 + (match ? 0.3 : 0) + 0.1 * quality(rating, reviewCount)) * 1000) / 1000;
+}
+
+/** The best `n` for AI scoring, interleaved across gift families so variety survives the cut. */
+export function preselect<T extends { fit: number; category: string }>(items: T[], n = 15): T[] {
+  const byFam = new Map<string, T[]>();
+  for (const it of [...items].sort((a, b) => b.fit - a.fit)) {
+    const f = giftFamily(it.category);
+    byFam.set(f, [...(byFam.get(f) ?? []), it]);
+  }
+  const out: T[] = [];
+  const lists = Array.from(byFam.values());
+  for (let i = 0; out.length < n && lists.some((l) => l[i]); i++) for (const l of lists) if (l[i] && out.length < n) out.push(l[i]!);
+  return out;
+}

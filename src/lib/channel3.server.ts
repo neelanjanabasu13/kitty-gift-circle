@@ -35,11 +35,21 @@ function mapProduct(raw: any): Product | null {
   return { id: String(raw.id), title: String(raw.title), image: typeof img === "string" ? img : null, category, rating, reviewCount, offers };
 }
 
-export async function searchProducts(opts: { query: string; potId: string; minPrice: number; maxPrice: number; limit?: number }): Promise<SearchResult> {
+// Search results are cached per (query, price range, country) for 30 minutes, so re-ranks within a band never re-search.
+const SEARCH_TTL = 30 * 60_000;
+const searchCache = new Map<string, { at: number; result: SearchResult }>();
+
+export async function searchProducts(opts: { query: string; potId: string; minPrice: number; maxPrice: number; limit?: number; timeoutMs?: number }): Promise<SearchResult> {
   const key = process.env["CHANNEL3_API_KEY"];
   if (!key) return { status: "not_configured" };
+  const ck = [opts.query.toLowerCase(), Math.floor(opts.minPrice), Math.ceil(opts.maxPrice), MARKET.country, opts.limit ?? 10].join("|");
+  const hit = searchCache.get(ck);
+  if (hit && Date.now() - hit.at < SEARCH_TTL) return hit.result;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 6000);
   try {
     const res = await fetch(`${BASE}/search`, {
+      signal: ctrl.signal,
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "x-user-id": opts.potId },
       body: JSON.stringify({
@@ -56,10 +66,14 @@ export async function searchProducts(opts: { query: string; potId: string; minPr
     }
     const json = JSON.parse(text);
     const list = Array.isArray(json) ? json : (json.products ?? json.results ?? []);
-    return { status: "ok", products: list.map(mapProduct).filter(Boolean) as Product[] };
+    const result: SearchResult = { status: "ok", products: list.map(mapProduct).filter(Boolean) as Product[] };
+    searchCache.set(ck, { at: Date.now(), result });
+    return result;
   } catch (e) {
     console.error("Channel3 search error", e);
-    return { status: "error", message: "Shop search is unreachable right now" };
+    return { status: "error", message: ctrl.signal.aborted ? "Shop search took too long" : "Shop search is unreachable right now" };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
