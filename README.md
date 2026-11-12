@@ -1,5 +1,7 @@
 # Kitty
 
+Live app: https://kitty-gift-circle.lovable.app
+
 **The group gift that knows the person and buys itself.**
 
 One organiser sets up a pot once. Friends or colleagues chip in through one share link, with no accounts. Every contribution is a PayPal **hold**, not a charge. Kitty's agent finds real gifts that fit the person and the money raised, runs an optional vote, and buys on a veto countdown. Nobody is charged unless the gift happens, and if the pot ends up bigger than the gift, everyone gets their surplus back in proportion to what they put in.
@@ -9,7 +11,7 @@ Built for the PayPal AI Hackathon.
 ## The flow
 
 1. **Set it up.** The organiser answers a short chat (who it's for, occasion, what they love and what to avoid, pot size, deadline, vote window, their PayPal email). Kitty creates a pot with a public share link and a private manage link.
-2. **Everyone chips in.** Contributors open `/k/{slug}`, pick an amount, choose whether their name and amount are shown, optionally vote on a category and sign the card, then place a PayPal hold. It takes about 10 seconds.
+2. **Everyone chips in.** Contributors open `https://kitty-gift-circle.lovable.app/k/{slug}`, pick an amount, choose whether their name and amount are shown, optionally vote on a category and sign the card, then place a PayPal hold. It takes about 10 seconds.
 3. **Kitty picks.** As the pot grows, the agent plans searches, finds real products through Channel3, drops anything that clashes with dislikes or the budget, scores fit with Lovable AI and ranks the picks in plain code. It narrates every step in a friendly activity feed.
 4. **Close and vote.** When the target is reached or the deadline passes, Kitty runs one last search at the exact pot and opens an optional vote on the top 3.
 5. **Veto countdown.** Kitty announces "Buying the X for £118 at 5pm unless you veto." The organiser can swap, veto or buy now. Doing nothing proceeds.

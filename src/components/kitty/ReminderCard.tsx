@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { KittyMascot } from "./KittyMascot";
 import { approveReminder } from "@/lib/kitty.functions";
+import { PUBLIC_SITE_URL } from "@/lib/config";
 
 type Reminder = { id: string; draft_text: string | null; approved_at: string | null; missing_count: number | null };
 
@@ -13,7 +14,7 @@ export function ReminderCard({ reminder, slug, adminToken, onDone }: { reminder:
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(reminder.draft_text ?? "");
   const [busy, setBusy] = useState(false);
-  const link = typeof window !== "undefined" ? `${window.location.origin}/k/${slug}` : `/k/${slug}`;
+  const link = `${PUBLIC_SITE_URL.replace(/\/$/, "")}/k/${slug}`;
   const message = (reminder.approved_at ? reminder.draft_text ?? text : text).replace("[link]", link);
   const n = reminder.missing_count ?? 0;
 
