@@ -3,8 +3,9 @@ import { DEMO_CAST, DEMO_TOTAL } from "./demoScript";
 import { splitLines } from "./closing";
 import type { DemoPick } from "./demoPicks";
 
-export type DemoAct = "chip" | "shop" | "vote" | "split" | "wrapped";
+export type DemoAct = "setup" | "chip" | "shop" | "vote" | "split" | "wrapped";
 export const DEMO_ACTS: { id: DemoAct; label: string }[] = [
+  { id: "setup", label: "Set up" },
   { id: "chip", label: "Chip in" },
   { id: "shop", label: "Shop" },
   { id: "vote", label: "Vote" },
@@ -12,13 +13,18 @@ export const DEMO_ACTS: { id: DemoAct; label: string }[] = [
   { id: "wrapped", label: "Wrapped" },
 ];
 
-export type SceneId = "chip" | "shop50" | "shop100" | "vote" | "veto" | "bars" | "rows" | "ribbon" | "card" | "receipt";
+export type SceneId = "setup" | "chip" | "shop50" | "shop100" | "vote" | "veto" | "bars" | "rows" | "ribbon" | "card" | "receipt";
 export type Scene = { id: SceneId; act: DemoAct; ms: number; caption: string };
 
 export const CHIP_LEAD_MS = 200;
 export const CHIP_GAP_MS = 1200;
 
+export const SETUP_MS = 7500;
+/** Setup beats (ms into the setup scene): name typed, Ceramics tapped, pot created, first ideas shown. */
+export const SETUP_BEATS = { name: 300, like: 2000, create: 3300, ideas: 4100 };
+
 export const SCENES: Scene[] = [
+  { id: "setup", act: "setup", ms: SETUP_MS, caption: "The organiser makes a pot for Priya and taps one like." },
   { id: "chip", act: "chip", ms: CHIP_LEAD_MS + DEMO_CAST.length * CHIP_GAP_MS + 400, caption: "Everyone chips in with a hold, not a charge." },
   { id: "shop50", act: "shop", ms: 7000, caption: "At £50, Kitty browses real shops for Priya." },
   { id: "shop100", act: "shop", ms: 6000, caption: "At £100 he reshuffles. Bigger gifts unlock." },

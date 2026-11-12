@@ -12,7 +12,7 @@ import { DEMO_CAST, DEMO_TARGET, DEMO_TOTAL, type DemoPerson } from "@/lib/demoS
 import type { DemoPick } from "@/lib/demoPicks";
 import {
   CHIP_GAP_MS, CHIP_LEAD_MS, DEMO_ACTS, DEMO_TOTAL_MS, POT_AT_100, POT_AT_50, RUNNING, SCENES, type SceneId,
-  DEMO_BOW_SNAP_MS, demoConfettiCue, demoSplit, finalOrder, nextUnlock, orderAt100, orderAt50, sceneAt, sceneStart, voteTally,
+  SETUP_BEATS, DEMO_BOW_SNAP_MS, demoConfettiCue, demoSplit, finalOrder, nextUnlock, orderAt100, orderAt50, sceneAt, sceneStart, voteTally,
 } from "@/lib/demoTimeline";
 
 const GBP = "GBP";
@@ -21,7 +21,7 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 const POP = { type: "spring" as const, stiffness: 420, damping: 30 };
 
 const MASCOT: Record<SceneId, MascotState> = {
-  chip: "chipIn", shop50: "searching", shop100: "ranking", vote: "vote", veto: "veto",
+  setup: "idle", chip: "chipIn", shop50: "searching", shop100: "ranking", vote: "vote", veto: "veto",
   bars: "counting", rows: "counting", ribbon: "buying", card: "done", receipt: "done",
 };
 
@@ -69,7 +69,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
   const next = () => setElapsed(at ? sceneStart(at.index + 1) : DEMO_TOTAL_MS);
   const actIdx = at ? DEMO_ACTS.findIndex((a) => a.id === at.scene.act) : DEMO_ACTS.length;
   const order = finalOrder(picks);
-  const raised = at?.scene.id === "chip" ? chippedRaised(at.t) : at?.scene.id === "shop50" ? POT_AT_50 : at?.scene.id === "shop100" ? POT_AT_100 : DEMO_TOTAL;
+  const raised = at?.scene.id === "setup" ? 0 : at?.scene.id === "chip" ? chippedRaised(at.t) : at?.scene.id === "shop50" ? POT_AT_50 : at?.scene.id === "shop100" ? POT_AT_100 : DEMO_TOTAL;
   // Shop scenes share one stage so the cards can reshuffle in place.
   const stageKey = at ? (at.scene.act === "shop" ? "shop" : at.scene.id) : "end";
 
@@ -87,7 +87,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
           ) : (
             <>
               <div ref={mascotRef} className={at?.scene.id === "ribbon" ? "flex justify-center" : "flex justify-center md:justify-start"}>
-                <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
+                <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "setup" ? (at.t > SETUP_BEATS.ideas ? 1 : 0) : at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
                   confettiMs={confettiStart === null ? false : elapsed - confettiStart}
                   externalRelease items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
               </div>
@@ -116,7 +116,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
                 {playing ? <><Pause /> Pause</> : <><Play /> Play</>}
               </Button>
             </Tip>
-            <Tip label="Start again from the first chip-in"><Button variant="quiet" size="tap" onClick={restart}><RotateCcw /> Restart</Button></Tip>
+            <Tip label="Start again from setting up the pot"><Button variant="quiet" size="tap" onClick={restart}><RotateCcw /> Restart</Button></Tip>
             <Tip label="Skip to the next scene"><Button variant="outline" size="tap" onClick={next} disabled={ended}><SkipForward /> Next scene</Button></Tip>
           </TooltipProvider>
         </footer>
@@ -139,7 +139,7 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 
 function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; onJump: (i: number) => void }) {
   return (
-    <div className="relative ml-2 min-w-0 flex-1 pb-5" aria-label={`Act ${Math.min(actIdx + 1, 5)} of 5`}>
+    <div className="relative ml-2 min-w-0 flex-1 pb-5" aria-label={`Act ${Math.min(actIdx + 1, DEMO_ACTS.length)} of ${DEMO_ACTS.length}`}>
       <div className="mx-6 h-[3px] overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-held transition-[width] duration-100 ease-linear" style={{ width: `${(elapsed / DEMO_TOTAL_MS) * 100}%` }} />
       </div>
@@ -160,6 +160,7 @@ function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; 
 
 function SceneView({ id, t, picks, rowRefs }: { id: SceneId; t: number; picks: DemoPick[]; rowRefs: RefObject<(HTMLLIElement | null)[]> }) {
   switch (id) {
+    case "setup": return <SetupScene t={t} picks={picks} />;
     case "chip": return <ChipScene t={t} picks={picks} />;
     case "shop50": case "shop100": return <ShopScene phase={id} t={t} picks={picks} />;
     case "vote": return <VoteScene t={t} picks={picks} />;
@@ -170,6 +171,58 @@ function SceneView({ id, t, picks, rowRefs }: { id: SceneId; t: number; picks: D
     case "card": return <CardScene t={t} />;
     case "receipt": return <ReceiptScene pick={picks[0]!} />;
   }
+}
+
+const SETUP_LIKES = ["Ceramics", "Books", "Cooking", "Coffee", "Plants", "Candles"];
+/** Organiser view: name typed, one like tapped, pot created, then first ideas (one from the like, popular kinds fill the rest). */
+function SetupScene({ t, picks }: { t: number; picks: DemoPick[] }) {
+  const B = SETUP_BEATS;
+  const name = "Priya".slice(0, Math.max(0, Math.min(5, Math.floor((t - B.name) / 140))));
+  const liked = t >= B.like;
+  const created = t >= B.create;
+  const ideas = t >= B.ideas;
+  const ordered = [picks.find((p) => p.category === "Plants") ?? picks[0]!, ...picks.filter((p) => p.category !== "Plants")].slice(0, 3);
+  return (
+    <div className="space-y-3">
+      <div className="rounded-[16px] border bg-card p-4 md:p-5">
+        <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">Organiser · new pot</p>
+        <p className="mt-1 font-display text-[26px] leading-tight md:text-[34px]">A gift for <span className="border-b-2 border-held">{name || "\u00a0"}</span></p>
+        <p className="mt-1 text-[13px] text-muted-foreground tabular">Target {money(DEMO_TARGET)} · closes Friday</p>
+        <p className="mt-3 text-[12px] text-muted-foreground">What is she into? One is enough.</p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {SETUP_LIKES.map((l) => {
+            const on = liked && l === "Ceramics";
+            return (
+              <motion.span key={l} animate={{ scale: on && t < B.like + 250 ? 0.92 : 1 }} transition={POP}
+                className={`inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[13px] ${on ? "border-held bg-held-soft font-medium text-held-ink" : "bg-background text-muted-foreground"}`}>
+                {on && <Check className="size-3.5" aria-hidden />}{l}
+              </motion.span>
+            );
+          })}
+        </div>
+        <motion.div animate={{ scale: created && t < B.create + 200 ? 0.96 : 1 }} transition={POP}
+          className={`mt-3 inline-flex h-10 items-center rounded-full px-4 text-[14px] font-medium ${created ? "bg-paid-soft text-paid" : "bg-primary text-primary-foreground"}`}>
+          {created ? <><Check className="mr-1.5 size-4" aria-hidden />Pot made, share link ready</> : "Make the pot"}
+        </motion.div>
+      </div>
+      <AnimatePresence>
+        {ideas && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={POP} className="rounded-[16px] border bg-card p-3 md:p-4">
+            <p className="text-[13px]">Behind the scenes, Kitty picks first ideas at {money(DEMO_TARGET)}: one for ceramics, plus popular gifts while he learns more about Priya.</p>
+            <div className="mt-2 grid max-w-[420px] grid-cols-3 gap-2">
+              {ordered.map((p, i) => (
+                <motion.div key={p.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ ...POP, delay: 0.25 * i }} className="min-w-0">
+                  <img src={p.image_url} alt="" className="aspect-square w-full rounded-[10px] bg-muted object-cover" />
+                  <p className="mt-1 truncate text-[11px] font-medium">{i === 0 ? "From her like" : "Popular gift"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{i === 0 ? "Ceramics planter" : p.category}</p>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 // ---------- small parts ----------

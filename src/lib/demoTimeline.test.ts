@@ -18,16 +18,16 @@ describe("demo stage timeline", () => {
     expect(demoConfettiCue(DEMO_BOW_SNAP_MS, true)).toBeNull();
     expect(demoConfettiCue(DEMO_BOW_SNAP_MS, false)).toBe(DEMO_BOW_SNAP_MS);
   });
-  it("plays the five acts in order: chip in, shop, vote, split, wrapped", () => {
+  it("plays the six acts in order: set up, chip in, shop, vote, split, wrapped", () => {
     const acts = SCENES.map((s) => s.act).filter((a, i, all) => all.indexOf(a) === i);
-    expect(acts).toEqual(["chip", "shop", "vote", "split", "wrapped"]);
+    expect(acts).toEqual(["setup", "chip", "shop", "vote", "split", "wrapped"]);
     expect(DEMO_ACTS.map((a) => a.id)).toEqual(acts);
     // acts never come back once finished
     const firstIdx = SCENES.map((s) => DEMO_ACTS.findIndex((a) => a.id === s.act));
     expect([...firstIdx].sort((a, b) => a - b)).toEqual(firstIdx);
   });
-  it("ends at 63 seconds, with no hold after the five-second veto", () => {
-    expect(DEMO_TOTAL_MS).toBe(63_000);
+  it("ends at 70.5 seconds, with no hold after the five-second veto", () => {
+    expect(DEMO_TOTAL_MS).toBe(70_500);
     expect(SCENES.find((s) => s.id === "veto")?.ms).toBe(5000);
   });
   it("first chip-in lands within 300ms and the rest every 1.2s", () => {
@@ -35,8 +35,9 @@ describe("demo stage timeline", () => {
     expect(CHIP_GAP_MS).toBe(1200);
   });
   it("finds the right scene for a moment and ends after the last", () => {
-    expect(sceneAt(0)?.scene.id).toBe("chip");
-    expect(sceneAt(sceneStart(3))?.scene.id).toBe("vote");
+    expect(sceneAt(0)?.scene.id).toBe("setup");
+    expect(sceneAt(sceneStart(1))?.scene.id).toBe("chip");
+    expect(sceneAt(sceneStart(4))?.scene.id).toBe("vote");
     expect(sceneAt(DEMO_TOTAL_MS)).toBeNull();
   });
   it("six of nine vote, and the top pick wins 4 to 2", () => {
