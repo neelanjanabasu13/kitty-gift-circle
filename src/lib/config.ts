@@ -40,3 +40,6 @@ export const VOTE_WINDOWS = [
 export type Occasion = (typeof OCCASIONS)[number]["value"];
 export type Closeness = (typeof CLOSENESS)[number]["value"];
 export type VoteWindow = (typeof VOTE_WINDOWS)[number]["value"];
+
+/** Public site address for share links; falls back to the current origin when unset. */
+export const PUBLIC_SITE_URL: string = (import.meta.env["VITE_PUBLIC_SITE_URL"] as string | undefined) ?? "";
