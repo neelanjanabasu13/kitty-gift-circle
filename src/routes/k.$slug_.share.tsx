@@ -1,6 +1,6 @@
 import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Check, Copy, Lock, Mail, MessageCircle, Hash } from "lucide-react";
 import { toast } from "sonner";
@@ -47,6 +47,7 @@ function SharePage() {
   const [canShare, setCanShare] = useState(false);
   const [fallback, setFallback] = useState<null | { kind: "copy" | "open"; value: string }>(null);
   const [pressed, setPressed] = useState(false);
+  const linkRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     setOrigin((PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, ""));
     setCanShare(typeof navigator.share === "function");
@@ -70,6 +71,17 @@ function SharePage() {
     } catch { /* fall through */ }
     setFallback({ kind: "copy", value: v });
     return false;
+  };
+  const quietCopy = async (v: string): Promise<boolean> => {
+    try { await navigator.clipboard.writeText(v); return true; } catch { /* fall through */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = v; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
   };
   const copy = async (v: string, label = "Copied") => { if (await copyText(v)) toast.success(label); };
   const openOut = (url: string) => {
@@ -112,15 +124,22 @@ function SharePage() {
 
         <section className="space-y-3">
           <div className="flex items-center gap-2 rounded-[14px] border bg-card p-2 pl-5 shadow-bar">
-            <span className="min-w-0 flex-1 truncate text-[15px] font-medium md:text-[17px]">{link.replace(/^https?:\/\//, "")}</span>
+            <span ref={linkRef} className="min-w-0 flex-1 truncate text-[15px] font-medium select-all md:text-[17px]">{link.replace(/^https?:\/\//, "")}</span>
             <Button variant="ink" size="xl" onClick={async () => { await copy(link, "Link copied"); setCopied(true); setTimeout(() => setCopied(false), 1600); }}>
               {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
             </Button>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Button variant="quiet" size="tap" onClick={() => { toast("Opening WhatsApp"); openOut("https://wa.me/?text=" + encodeURIComponent(msg)); }}><MessageCircle /> WhatsApp</Button>
-            <Button variant="quiet" size="tap" onClick={async () => {
-              if (await copyText(msg)) toast.success("Copied. Paste it in Slack.", { action: { label: "Open Slack in browser", onClick: () => openOut("https://app.slack.com/client") } });
+            <Button variant="quiet" size="tap" onClick={() => {
+              // Toast first, synchronously, so the click always shows a response.
+              const id = toast.success("Copied. Paste it in Slack.", { action: { label: "Open Slack in browser", onClick: () => openOut("https://app.slack.com/client") } });
+              void quietCopy(msg).then((ok) => {
+                if (ok) return;
+                toast("Copy the link below and paste it in Slack.", { id });
+                const el = linkRef.current;
+                if (el) { const r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(r); }
+              });
               openOut("slack://open");
             }}><Hash /> Slack</Button>
             <Button variant="quiet" size="tap" onClick={() => { toast("Opening your email app"); openOut("mailto:?subject=" + encodeURIComponent("Chip in for " + name + "'s gift") + "&body=" + encodeURIComponent(msg)); }}><Mail /> Email</Button>

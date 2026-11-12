@@ -63,7 +63,7 @@ export function createAuthorizeOrder(opts: { amount: number; currency: string; c
           amount: { currency_code: opts.currency, value: opts.amount.toFixed(2) },
         },
       ],
-      application_context: { shipping_preference: "NO_SHIPPING", brand_name: "Kitty", user_action: "CONTINUE" },
+      application_context: { shipping_preference: "NO_SHIPPING", brand_name: "Kitty", locale: "en-GB", user_action: "CONTINUE" },
     },
   });
 }

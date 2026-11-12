@@ -8,11 +8,12 @@ declare global {
 }
 
 let sdkPromise: Promise<void> | null = null;
-function loadSdk(clientId: string, currency: string) {
+function loadSdk(clientId: string, currency: string, sandbox = false) {
   if (sdkPromise) return sdkPromise;
   sdkPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=${currency}&intent=authorize&components=buttons&enable-funding=card&disable-funding=paylater,venmo`;
+    // UK guest card form: GBP, British English locale (UK postcode + +44), buyer-country only allowed in sandbox.
+    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=${currency}&intent=authorize&locale=en_GB${sandbox ? "&buyer-country=GB" : ""}&components=buttons&enable-funding=card&disable-funding=paylater,venmo`;
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => {
@@ -28,7 +29,7 @@ function loadSdk(clientId: string, currency: string) {
 let warmPromise: Promise<void> | null = null;
 export function warmPaypal(currency: string) {
   if (warmPromise) return warmPromise;
-  warmPromise = getPayPalClientId().then(({ clientId }) => (clientId ? loadSdk(clientId, currency) : undefined)).catch((e) => { warmPromise = null; throw e; });
+  warmPromise = getPayPalClientId().then(({ clientId, sandbox }) => (clientId ? loadSdk(clientId, currency, sandbox) : undefined)).catch((e) => { warmPromise = null; throw e; });
   return warmPromise;
 }
 
@@ -55,9 +56,9 @@ export function PayPalHold({
     let buttons: any;
     (async () => {
       try {
-        const { clientId } = await getPayPalClientId();
+        const { clientId, sandbox } = await getPayPalClientId();
         if (!clientId) return setState("unconfigured");
-        await loadSdk(clientId, currency);
+        await loadSdk(clientId, currency, sandbox);
         if (cancelled || !ref.current || !window.paypal) return;
         buttons = window.paypal.Buttons({
           style: { layout: "vertical", shape: "pill", color: "gold", label: "paypal", height: 48 },

@@ -322,7 +322,8 @@ export const getPot = createServerFn({ method: "GET" })
 
 // ---------- PayPal public config ----------
 export const getPayPalClientId = createServerFn({ method: "GET" }).handler(async () => {
-  return { clientId: process.env["PAYPAL_CLIENT_ID"] ?? null };
+  // Kitty runs on the PayPal sandbox only (see paypal.server.ts).
+  return { clientId: process.env["PAYPAL_CLIENT_ID"] ?? null, sandbox: true };
 });
 
 // ---------- create contribution order ----------
