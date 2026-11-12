@@ -113,9 +113,16 @@ The app is TanStack Start (React 19, Vite) with Lovable Cloud for the database a
 
 ## Test accounts
 
-- Sandbox buyer login: `TODO`
-- Sandbox buyer password: `TODO`
-- Test card: `TODO`
+The quickest way to see the whole story is the self-playing demo at https://kitty-gift-circle.lovable.app/demo, which needs no account and takes about 70 seconds.
+
+To place a real PayPal sandbox hold yourself:
+
+1. Open the live app, tap "Start a pot", then open the share link to reach the contributor page.
+2. Pick an amount and choose "Debit or credit card" in the PayPal button.
+3. Use a PayPal sandbox test card, for example Visa `4032 0391 0533 0447`, any future expiry (such as `12/2030`), any 3 digit CVV, and a UK address such as postcode `SW1A 1AA`. More test cards are listed at https://developer.paypal.com/tools/sandbox/card-testing/.
+4. The pot page then shows your money as "held". Withdrawing releases (voids) the hold straight away.
+
+No real money moves: every call goes to the PayPal sandbox.
 
 ## Licence
 

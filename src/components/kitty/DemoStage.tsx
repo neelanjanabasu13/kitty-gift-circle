@@ -149,7 +149,7 @@ function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; 
             <button type="button" onClick={() => onJump(i)} aria-current={i === actIdx ? "step" : undefined} aria-label={`Jump to ${a.label}`}
               className="-mt-[14px] flex min-h-11 flex-col items-center justify-start gap-1 px-1 pt-[14px]">
               <span className={`rounded-full border-2 transition-all ${i === actIdx ? "size-[11px] border-held bg-held ring-4 ring-held/20" : i < actIdx ? "size-[9px] border-held bg-held" : "size-[9px] border-border bg-card"}`} />
-              <span className={`whitespace-nowrap text-[10px] sm:text-[11px] ${i === actIdx ? "font-semibold text-held-ink" : "text-muted-foreground"}`}>{a.label}</span>
+              <span className={`whitespace-nowrap text-[10px] sm:inline sm:text-[11px] ${i === actIdx ? "font-semibold text-held-ink" : "hidden text-muted-foreground"}`}>{a.label}</span>
             </button>
           </li>
         ))}
