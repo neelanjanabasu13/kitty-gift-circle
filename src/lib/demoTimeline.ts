@@ -32,7 +32,7 @@ export const SCENES: Scene[] = [
   { id: "veto", act: "vote", ms: 5000, caption: "Last chance to swap or veto. Then he buys." },
   { id: "bars", act: "split", ms: 4000, caption: "The gift costs less than the pot holds." },
   { id: "rows", act: "split", ms: 7000, caption: "You're only charged your share. The rest is released." },
-  { id: "ribbon", act: "wrapped", ms: 3800, caption: "Kitty ties it up with a PayPal blue bow." },
+  { id: "ribbon", act: "wrapped", ms: 3800, caption: "Tied with a ribbon and ready to give." },
   { id: "card", act: "wrapped", ms: 6000, caption: "Everyone's messages, signed into one card." },
   { id: "receipt", act: "wrapped", ms: 4000, caption: "Paid by PayPal. Nobody fronted a penny." },
 ];
