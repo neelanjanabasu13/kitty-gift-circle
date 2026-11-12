@@ -1,13 +1,13 @@
 import type React from "react";
 import { useEffect, useId, useState, lazy, Suspense } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, useSpring } from "motion/react";
 const Confetti = lazy(() => import("./MascotConfetti"));
 
 // Kitty the cat butler: a sleek black ink silhouette with white negative space, almond half-lidded eyes,
 // a bow tie and one white glove, standing behind a kraft gift box tied with a PayPal blue ribbon.
 // Inline SVG, motion/react only. Eyes are thin path shapes (no circles or ellipses).
 
-export type MascotState = "idle" | "chipIn" | "searching" | "ranking" | "vote" | "veto" | "buying" | "done" | "cancelled";
+export type MascotState = "idle" | "chipIn" | "counting" | "searching" | "ranking" | "vote" | "veto" | "buying" | "done" | "cancelled";
 
 const SPRING = { type: "spring" as const, stiffness: 170, damping: 18, mass: 0.9 };
 const LIMB = { type: "spring" as const, stiffness: 120, damping: 14, mass: 1 }; // softer, so limbs follow through
@@ -23,6 +23,7 @@ export const PAYPAL_BLUES = ["#003087", "#0070E0", "#009CDE"];
 const ARM: Record<MascotState, { a: number; b: number }> = {
   idle: { a: 0, b: 0 },
   chipIn: { a: -8, b: -6 },
+  counting: { a: -35, b: 20 },
   searching: { a: -100, b: -108 },
   ranking: { a: -40, b: -20 },
   vote: { a: -120, b: 30 },
@@ -46,19 +47,19 @@ const PROPS: Record<Prop, React.ReactNode> = {
 };
 
 // Choreographed loops: shoulder (a) and elbow (b) keyframes with props shown/hidden on the same timeline.
-type Act = { a: number[]; b: number[]; dur: number; times: number[]; props?: { k: Prop; o: number[] }[]; hold?: boolean };
+type Act = { a: number[]; b: number[]; dur: number; times: number[]; head?: number[]; props?: { k: Prop; o: number[] }[]; hold?: boolean; once?: boolean };
 // Browsing: for each item, reach into the box, lift it to the monocle, turn it over, then set it back down.
-const BEAT = [0, 0.2, 0.42, 0.62, 0.86];
-const BEAT_A = [12, -96, -90, -99, 12];
-const BEAT_B = [12, -106, -114, -100, 12];
+const BEAT = [0, 0.26, 0.48, 0.68, 0.96];
+const BEAT_A = [12, -100, -94, -101, 12];
+const BEAT_B = [12, -106, -112, -102, 12];
 function browse(items: Prop[]): Act {
   const n = items.length;
   const times: number[] = [], a: number[] = [], b: number[] = [];
-  for (let k = 0; k < n; k++) BEAT.forEach((f, j) => { times.push((k + f) / n); a.push(BEAT_A[j]!); b.push(BEAT_B[j]!); });
+  for (let k = 0; k < n; k++) BEAT.forEach((f, j) => { times.push((k + f) / n); a.push(BEAT_A[j] ?? 12); b.push(BEAT_B[j] ?? 12); });
   times.push(1); a.push(12); b.push(12);
   // o[i] marks the interval starting at times[i]; the item rides in the glove from pick-up until it's set down.
   const props = items.map((it, k) => ({ k: it, o: times.map((_, i) => (Math.floor(i / BEAT.length) === k && i % BEAT.length < BEAT.length - 1 ? 1 : 0)) }));
-  return { dur: n * 3.2, times, a, b, props, hold: true };
+  return { dur: n * 1.4, times, a, b, props, hold: true };
 }
 /** Head looks at whatever the glove is holding: tilts in while inspecting, back down to the box between items. */
 function browseHead(act: Act) {
@@ -71,18 +72,38 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   idle: { dur: 8, times: [0, 0.55, 0.65, 0.75, 0.88, 1], a: [0, 0, 20, -45, -45, 0], b: [0, 0, 10, -60, -60, 0],
     props: [{ k: "coin", o: [0, 0, 0, 1, 1, 0] }] },
   // Catch the coin, show it off, pop it in the box.
-  chipIn: { dur: 2.4, times: [0, 0.3, 0.6, 0.85, 1], a: [-8, -70, -70, 10, -8], b: [-6, -50, -50, 10, -6],
-    props: [{ k: "coin", o: [0, 1, 1, 0, 0] }] },
+  chipIn: { dur: 1.2, once: true, hold: true, times: [0, 0.2, 0.4, 0.64, 0.85, 1],
+    a: [-90, -90, -100, 12, 12, -8], b: [-70, -70, -100, 12, 12, -6], head: [0, -3, -9, 5, 5, 0],
+    props: [{ k: "coin", o: [0, 1, 1, 1, 0, 0] }] },
+  // Three measured taps build a neat stack, then the surplus is pushed right.
+  counting: { dur: 4.8, hold: true, times: [0, 0.08, 0.18, 0.25, 0.33, 0.43, 0.5, 0.58, 0.68, 0.75, 0.84, 0.92, 1],
+    a: [12, -72, -35, 12, -72, -35, 12, -72, -35, -35, -60, -60, 12],
+    b: [12, -80, 20, 12, -80, 20, 12, -80, 20, 20, 55, 55, 12],
+    head: [0, -5, 3, 0, -5, 3, 0, -5, 3, 0, 0, 8, 0],
+    props: [{ k: "coin", o: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0] }] },
   // Pick a gift up, inspect it at eye level, put it down, pick up another.
   searching: browse(["camera", "pan", "candle", "chocs", "giftB"]),
   // Take the chosen gift, consider it once more, pack it into the box.
-  ranking: { dur: 3.6, times: [0, 0.25, 0.5, 0.75, 1], a: [-40, -75, -75, 15, -40], b: [-20, -30, -30, 15, -20],
-    props: [{ k: "giftA", o: [0, 1, 1, 0, 0] }] },
+  ranking: { dur: 4.2, hold: true, times: [0, 0.12, 0.23, 0.33, 0.45, 0.56, 0.67, 0.79, 0.9, 1],
+    a: [12, -100, -94, 12, -100, -94, 12, -96, 12, 12],
+    b: [12, -106, -112, 12, -106, -112, 12, -106, 12, 12],
+    head: [0, -8, 4, 0, -8, 4, 0, -4, 8, 0],
+    props: [{ k: "giftA", o: [0, 1, 1, 0, 0, 0, 0, 0, 0, 0] }, { k: "giftB", o: [0, 0, 0, 0, 1, 1, 0, 1, 1, 0] }] },
   // Paw hovers, then two dainty taps on the bell.
   veto: { dur: 3, times: [0, 0.5, 0.6, 0.7, 0.8, 1], a: [-22, -22, -8, -22, -8, -22], b: [-10, -10, 4, -10, 4, -10] },
   // Wrapping: pull the ribbon down, loop it over, tug it tight.
-  buying: { dur: 3, times: [0, 0.24, 0.45, 0.7, 1], a: [-55, 15, -70, -30, -55], b: [45, 30, 60, 80, 45] },
+  buying: { dur: 3.8, once: true, times: [0, 0.26, 0.52, 0.68, 0.76, 0.9, 1],
+    a: [12, -58, -95, -40, -50, -50, 12], b: [12, 35, 45, 65, 50, 50, 12], head: [0, 0, -4, 0, 0, 12, 0] },
 };
+
+function sample(values: number[], times: number[], phase: number) {
+  let i = 0;
+  while (i < times.length - 2 && (times[i + 1] ?? 1) <= phase) i++;
+  const start = times[i] ?? 0, end = times[i + 1] ?? 1;
+  const progress = Math.max(0, Math.min(1, (phase - start) / (end - start || 1)));
+  const smooth = progress * progress * (3 - 2 * progress);
+  return (values[i] ?? 0) + ((values[i + 1] ?? values[i] ?? 0) - (values[i] ?? 0)) * smooth;
+}
 
 const TAIL = {
   s1: "M66 160 C42 158 30 142 38 126 C46 110 34 94 20 92",
@@ -92,11 +113,14 @@ const TAIL = {
   high: "M66 160 C40 150 34 120 44 98 C52 80 46 66 34 60",
 };
 
-export function KittyMascot({ state = "idle", fill = 0, size = 72, className, label, wink: forceWink = false }: { state?: MascotState; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean }) {
+export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean }) {
+  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} />;
+}
+
+function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean }) {
   const reduce = !!useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const grad = `rb-${uid}`;
-  const s = state;
   const blinking = useBlink(!reduce && s !== "buying");
   const coins = Math.max(0, Math.min(5, Math.round(Math.max(0, Math.min(1, fill)) * 5)));
   const loop = (d: number, delay = 0) => (reduce ? { duration: 0 } : { duration: d, repeat: Infinity, ease: SILK, delay });
@@ -112,21 +136,33 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
     : s === "cancelled" ? TAIL.low
     : R([TAIL.s3, TAIL.s1, TAIL.s3], TAIL.s3);
   const ribbonOn = s !== "cancelled";
-  const act = reduce ? undefined : ACTS[s];
+  const act = reduce || (s === "chipIn" && beat === 0) ? undefined : ACTS[s];
   // Which held prop is visible, driven by a clock on the same timeline as the arm keyframes.
   const [phase, setPhase] = useState(0);
+  const shoulder = useSpring(act?.a[0] ?? arm.a, LIMB);
+  const elbow = useSpring(act?.b[0] ?? arm.b, LIMB);
+  const head = useSpring(0, SPRING);
+  const tail = useSpring(0, { stiffness: 75, damping: 15, mass: 1.2 });
   useEffect(() => {
-    if (!act?.props) return;
+    if (!act) return;
     const t0 = performance.now();
-    const id = setInterval(() => setPhase(((performance.now() - t0) / 1000 / act.dur) % 1), 80);
+    const id = setInterval(() => {
+      const raw = (performance.now() - t0) / 1000 / act.dur;
+      const p = act.once && beat !== undefined ? Math.min(1, raw) : raw % 1;
+      setPhase(p);
+      shoulder.set(sample(act.a, act.times, p));
+      elbow.set(sample(act.b, act.times, p));
+      head.set(sample(act.head ?? (s === "searching" ? browseHead(act) : act.a.map(() => 0)), act.times, p));
+      tail.set(sample(act.a, act.times, Math.max(0, p - 0.035)) / 16);
+    }, 1000 / 60);
     return () => clearInterval(id);
-  }, [act]);
+  }, [act, beat, s, shoulder, elbow, head, tail]);
   const propOn = (o: number[]) => {
     if (!act) return false;
     let i = 0;
-    while (i < act.times.length - 1 && act.times[i + 1]! <= phase) i++;
+    while (i < act.times.length - 1 && (act.times[i + 1] ?? 1) <= phase) i++;
     if (act.hold) return o[i] === 1;
-    return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - act.times[i]! < ((act.times[i + 1] ?? 1) - act.times[i]!) / 2;
+    return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - (act.times[i] ?? 0) < ((act.times[i + 1] ?? 1) - (act.times[i] ?? 0)) / 2;
   };
 
   return (
@@ -144,7 +180,7 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
           </defs>
 
           {/* Tail leads the motion: it moves first, limbs follow a beat later. */}
-          <motion.path d={TAIL.s1} fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round"
+          <motion.path d={TAIL.s1} fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round" style={{ rotate: tail, originX: "66px", originY: "160px", transformBox: "view-box" }}
             animate={{ d: tailD }}
             transition={Array.isArray(tailD) ? { duration: 5.5, repeat: Infinity, ease: SILK } : t({ duration: 0.9, ease: SILK })} />
 
@@ -164,9 +200,9 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
             </motion.g>
 
             {/* head */}
-            <motion.g style={{ originX: "96px", originY: "70px", transformBox: "view-box" }}
-              animate={
-                s === "chipIn" ? R({ rotate: [0, 9, 0], y: [0, 3, 0] }, { rotate: 6, y: 2 })
+            <motion.g style={{ originX: "96px", originY: "70px", transformBox: "view-box", ...(act ? { rotate: head } : {}) }}
+              animate={act ? { y: 0 } :
+                s === "chipIn" ? { rotate: 6, y: 2 }
                 : s === "done" ? R({ y: [0, 10, 10, 0], rotate: [0, 6, 6, 0] }, { y: 10, rotate: 6 })
                 : s === "searching" && act ? { rotate: browseHead(act), y: 0 }
                 : { rotate: s === "ranking" ? 9 : s === "veto" ? -5 : s === "searching" ? -3 : s === "cancelled" ? -4 : 0, y: s === "idle" ? R([0, -0.8, 0], 0) : 0 }
@@ -191,16 +227,16 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
             </motion.g>
 
             {/* right arm: choreographed per state (pick up, inspect, put down, catch coins, ring, tug ribbon) */}
-            <motion.g style={{ originX: "112px", originY: "86px", transformBox: "view-box" }}
-              animate={{ rotate: act ? act.a : arm.a }}
-              transition={act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : { ...LIMB, delay: reduce ? 0 : 0.08 }}>
+            <motion.g style={{ originX: "112px", originY: "86px", transformBox: "view-box", ...(act ? { rotate: shoulder } : {}) }}
+              animate={act ? {} : { rotate: arm.a }}
+              transition={t(LIMB)}>
               <path d="M112 86 L124 106" stroke={INK} strokeWidth={7} strokeLinecap="round" />
-              <motion.g style={{ originX: "124px", originY: "106px", transformBox: "view-box" }}
-                animate={act ? { rotate: act.b } : s === "cancelled" ? { rotate: R([-25, 20, -25], 0) } : { rotate: arm.b }}
-                transition={act ? { duration: act.dur, times: act.times, repeat: Infinity, ease: SILK } : s === "cancelled" ? loop(1.3) : { ...LIMB, delay: reduce ? 0 : 0.16 }}>
+              <motion.g style={{ originX: "124px", originY: "106px", transformBox: "view-box", ...(act ? { rotate: elbow } : {}) }}
+                animate={act ? {} : s === "cancelled" ? { rotate: R([-25, 20, -25], 0) } : { rotate: arm.b }}
+                transition={s === "cancelled" ? loop(1.3) : t(LIMB)}>
                 <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
                 {/* props held in the glove */}
-                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`}>{PROPS[pr.k]}</g> : null)}
+                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`} data-held-item={pr.k} transform={`translate(131 115) rotate(${-shoulder.get() - elbow.get()}) scale(${pr.k === "coin" ? 1 : 1.55}) translate(-131 -115)`}>{PROPS[pr.k]}</g> : null)}
                 {/* white glove */}
                 <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
                 <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
@@ -218,10 +254,16 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
 
           {/* Coins inside, peeking over the rim as the pot fills; they float out when cancelled */}
           {Array.from({ length: coins }).map((_, i) => (
-            <motion.circle key={i} cx={74 + i * 14} cy={130} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.6}
+            <motion.circle key={i} cx={74 + i * 14} cy={125} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.6}
               initial={{ y: 8 }} animate={{ y: s === "cancelled" ? R(-80 - i * 10, -18) : 0, opacity: s === "cancelled" ? R(0, 0.6) : 1 }}
               transition={s === "cancelled" ? t({ duration: 2, delay: i * 0.15, ease: SILK }) : SPRING} />
           ))}
+
+          {s === "counting" && <g aria-hidden>
+            {Array.from({ length: reduce ? 3 : Math.min(3, Math.floor(phase / 0.25)) }).map((_, i) => (
+              <ellipse key={i} cx={149} cy={123 - i * 3} rx={8} ry={3} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.2} />
+            ))}
+          </g>}
 
           {/* Box */}
           <rect x={58} y={128} width={102} height={54} rx={5} fill={KRAFT} stroke={INK} strokeWidth={2} />
@@ -230,7 +272,18 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
             style={{ originX: "109px", originY: "128px", transformBox: "view-box" }}
             initial={false}
             animate={{ scaleY: ribbonOn ? (s === "buying" ? R([0, 1], 1) : 1) : 0, opacity: ribbonOn ? 1 : 0 }}
-            transition={s === "buying" ? t({ duration: 0.7, ease: SILK, repeat: Infinity, repeatDelay: 2.3 }) : t({ duration: 0.9, ease: SILK })} />
+            transition={s === "buying" ? t({ duration: 0.9, ease: SILK, repeat: beat === undefined ? Infinity : 0, repeatDelay: 2.9 }) : t({ duration: 0.9, ease: SILK })} />
+
+          {s === "buying" && <path d="M58 146 H160" stroke={`url(#${grad})`} strokeWidth={8} pathLength={1}
+            strokeDasharray="1 1" strokeDashoffset={reduce ? 0 : 1 - Math.min(1, phase / 0.26)} />}
+
+          {s === "counting" && <g aria-hidden>
+            {[0, 1, 2].map((i) => {
+              const slide = reduce ? 1 : Math.max(0, Math.min(1, (phase - 0.76 - i * 0.025) / 0.16));
+              return <motion.ellipse key={i} cx={149} cy={123 - i * 3} rx={7} ry={3} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.2}
+                animate={{ x: slide * (27 + i * 6), y: slide * (24 + i * 3), opacity: reduce || phase > 0.76 ? 1 : 0 }} transition={t(LIMB)} />;
+            })}
+          </g>}
 
           {/* Bell on the lid (veto) */}
           <AnimatePresence>
@@ -245,12 +298,12 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
 
           {/* Coin dropping in (chip-in) */}
           <AnimatePresence>
-            {s === "chipIn" && (
+            {s === "chipIn" && !reduce && beat !== 0 && (
               <motion.g key="coin" initial={{ y: -90, opacity: 0 }}
-                animate={R({ y: [-90, 0, -6, 0], opacity: [0, 1, 1, 0] }, { y: 0, opacity: 1 })}
-                transition={reduce ? { duration: 0 } : { duration: 1.2, times: [0, 0.55, 0.75, 1], ease: "easeOut", repeat: Infinity, repeatDelay: 0.5 }}>
-                <circle cx={84} cy={122} r={7} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.8} />
-                <path d="M84 118 L84 126" stroke={INK} strokeWidth={1.4} strokeLinecap="round" />
+                animate={{ y: [-50, 0, 0], opacity: [1, 1, 0] }}
+                transition={{ duration: 0.24, times: [0, 0.85, 1], ease: "easeOut", repeat: beat === undefined ? Infinity : 0, repeatDelay: 0.96 }}>
+                <circle cx={124} cy={64} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.8} />
+                <path d="M124 60 V68" stroke={INK} strokeWidth={1.4} strokeLinecap="round" />
               </motion.g>
             )}
           </AnimatePresence>
@@ -259,12 +312,12 @@ export function KittyMascot({ state = "idle", fill = 0, size = 72, className, la
           <motion.g style={{ originX: "109px", originY: "128px", transformBox: "view-box" }} initial={false}
             animate={
               s === "cancelled" ? { scale: R(0, 0.6), rotate: 50, opacity: R(0, 0.4) }
-              : s === "buying" ? { scale: R([0, 0, 1.25, 1], 1), rotate: 0, opacity: 1 }
+              : s === "buying" ? { scale: reduce ? 1 : sample([0, 0, 1.18, 1, 1], [0, 0.52, 0.68, 0.76, 1], phase), rotate: 0, opacity: 1 }
               : s === "done" ? { scale: 1.1, y: R([0, -7, 0], 0), rotate: 0, opacity: 1 }
               : { scale: 1, y: 0, rotate: 0, opacity: 1 }
             }
             transition={
-              s === "buying" ? t({ duration: 3, times: [0, 0.24, 0.3, 0.36], ease: "easeOut", repeat: Infinity })
+              s === "buying" ? t(SNAP)
               : s === "done" ? { y: loop(1, 0.4), scale: SNAP }
               : t({ duration: 0.8, ease: SILK })
             }>
@@ -315,6 +368,7 @@ function describe(s: MascotState) {
   return {
     idle: "standing by the gift box",
     chipIn: "nodding as a coin drops in",
+    counting: "stacking coins and sliding the released money back",
     searching: "browsing gifts: a camera, a pan, a candle, chocolates and a mug",
     ranking: "packing the chosen gift into the box",
     vote: "presenting the ballot",

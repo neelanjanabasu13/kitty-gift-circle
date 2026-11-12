@@ -21,7 +21,7 @@ const POP = { type: "spring" as const, stiffness: 420, damping: 30 };
 
 const MASCOT: Record<SceneId, MascotState> = {
   chip: "chipIn", shop50: "searching", shop100: "ranking", vote: "vote", veto: "veto",
-  bars: "idle", rows: "idle", ribbon: "buying", card: "done", receipt: "done",
+  bars: "counting", rows: "counting", ribbon: "buying", card: "done", receipt: "done",
 };
 
 /** Full-screen, client-side demo story. One clock drives every scene, so pause, next and restart are instant. */
@@ -64,7 +64,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
           ) : (
             <>
               <div className="flex justify-center md:justify-start">
-                <KittyMascot state={MASCOT[at!.scene.id]} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
+                <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
                   className="!size-[120px] md:!size-[260px] [&_svg]:!size-full" />
               </div>
               <div className="min-w-0">
