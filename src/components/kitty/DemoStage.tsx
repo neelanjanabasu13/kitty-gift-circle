@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Check, SkipForward, ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, SkipForward, ChevronDown, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import demoMusic from "@/assets/kitty-demo-music.mp3.asset.json";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KittyMascot, type MascotState } from "./KittyMascot";
@@ -29,12 +30,37 @@ const MASCOT: Record<SceneId, MascotState> = {
 export function DemoStage({ picks }: { picks: DemoPick[] }) {
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [soundOn, setSoundOn] = useState(true);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const elapsedRef = useRef(elapsed);
+  elapsedRef.current = elapsed;
   const stageRef = useRef<HTMLDivElement>(null);
   const mascotRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
   const confettiFired = useRef(false);
   const [confettiStart, setConfettiStart] = useState<number | null>(null);
   const ended = elapsed >= DEMO_TOTAL_MS;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = 0.3;
+    if (!soundOn || !playing || ended) {
+      audio.pause();
+      return;
+    }
+    audio.currentTime = elapsedRef.current / 1000;
+    let active = true;
+    void audio.play().catch(() => { if (active) setSoundOn(false); });
+    return () => { active = false; audio.pause(); };
+  }, [soundOn, playing, ended]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio && audio.readyState > 0 && Math.abs(audio.currentTime - elapsed / 1000) > 1) {
+      audio.currentTime = elapsed / 1000;
+    }
+  }, [elapsed]);
 
   useEffect(() => {
     if (elapsed < DEMO_BOW_SNAP_MS) {
@@ -76,6 +102,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
   return (
     <MotionConfig reducedMotion="user">
       <div ref={stageRef} className="relative flex min-h-[100dvh] flex-col overflow-x-hidden">
+        <audio ref={audioRef} src={demoMusic.url} preload="none" aria-hidden />
         <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 pt-4 md:px-8 md:pt-6">
           <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full pr-2 text-[14px] font-medium text-foreground hover:text-held"><ArrowLeft className="size-4" aria-hidden /> Back to Kitty</Link>
           <ActBar elapsed={elapsed} actIdx={actIdx} onJump={jump} />
@@ -109,8 +136,13 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
         </main>
         {at?.scene.id === "rows" && <ReleasedCoins t={at.t} stageRef={stageRef} mascotRef={mascotRef} rowRefs={rowRefs} />}
 
-        <footer className="mx-auto flex w-full max-w-6xl items-center justify-center gap-2 px-5 pb-6 md:justify-end md:px-8">
+        <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-2 px-5 pb-6 md:justify-end md:px-8">
           <TooltipProvider delayDuration={300}>
+            <Tip label={soundOn ? "Mute background music" : "Turn on background music"}>
+              <Button variant="quiet" size="tap" aria-pressed={soundOn} onClick={() => setSoundOn((on) => !on)}>
+                {soundOn ? <><Volume2 /> Sound on</> : <><VolumeX /> Sound off</>}
+              </Button>
+            </Tip>
             <Tip label={playing ? "Pause the story" : "Carry on playing"}>
               <Button variant="quiet" size="tap" onClick={() => setPlaying((p) => !p)} disabled={ended}>
                 {playing ? <><Pause /> Pause</> : <><Play /> Play</>}
