@@ -2,7 +2,7 @@ import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/Stat
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Lock, CircleAlert } from "lucide-react";
+import { Lock, CircleAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Chip, Segmented } from "@/components/kitty/Chip";
@@ -11,14 +11,14 @@ import { Missing } from "@/components/kitty/Missing";
 import { PotMeter } from "@/components/kitty/PotMeter";
 import { Deadline, PicksGrid, PotLive, topPicks } from "@/components/kitty/PotLive";
 import { CommissionNote } from "@/components/kitty/PickCard";
-import { PayPalHold } from "@/components/kitty/PayPalHold";
+import { PayPalHold, warmPaypal } from "@/components/kitty/PayPalHold";
 import { AgentTicker } from "@/components/kitty/AgentFeed";
 import { MoneyPill } from "@/components/kitty/Money";
 import { Cancelled, PayPalDetails } from "@/components/kitty/Stages";
 import { KittyMascot } from "@/components/kitty/KittyMascot";
 import { ClosingStage, useTick } from "@/components/kitty/Closing";
 import { Link } from "@tanstack/react-router";
-import { potQuery, useLivePot } from "@/components/kitty/usePot";
+import { potQuery, useLivePot, markPotActed } from "@/components/kitty/usePot";
 import { INTERESTS } from "@/lib/config";
 import { amountChips, formatMoney, suggestedAmount } from "@/lib/kitty";
 import { authorizeContribution, createContributionOrder, triggerAgent, withdrawContribution } from "@/lib/kitty.functions";
@@ -87,7 +87,7 @@ function ContributorPage() {
             {pot.status === "done" && <p className="mt-2 text-center"><Link to="/k/$slug/card" params={{ slug }} className="min-h-11 text-[14px] text-muted-foreground underline underline-offset-4">Open the card for {pot.recipient_name}</Link></p>}
           </div>
         ) : mine && !mine.withdrawn ? (
-          <Success mine={mine} currency={pot.currency} canWithdraw={pot.status === "collecting"} onWithdrawn={() => saveMine({ ...mine, withdrawn: true })} name={pot.recipient_name} />
+          <Success mine={mine} currency={pot.currency} canWithdraw={pot.status === "collecting"} onWithdrawn={() => { saveMine({ ...mine, withdrawn: true }); markPotActed(slug); }} name={pot.recipient_name} />
         ) : (
           <div className="mx-auto max-w-xl space-y-8 pt-8">
             <div className="space-y-3">
@@ -105,7 +105,7 @@ function ContributorPage() {
             {closed ? (
               <p className="border-t pt-6 text-[15px] text-muted-foreground">This kitty has stopped taking contributions.</p>
             ) : (
-              <ChipInForm slug={slug} name={pot.recipient_name} currency={pot.currency} target={pot.target_amount} expected={pot.expected_count} likes={pot.likes} paypalReady={data.config.paypal} onDone={(m) => saveMine(m)} />
+              <ChipInForm slug={slug} name={pot.recipient_name} currency={pot.currency} target={pot.target_amount} expected={pot.expected_count} likes={pot.likes} paypalReady={data.config.paypal} onDone={(m) => { saveMine(m); markPotActed(slug); }} />
             )}
           </div>
         )}
@@ -125,15 +125,11 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
   const chips = amountChips(target, expected);
   const suggested = suggestedAmount(target, expected);
   const [amount, setAmount] = useState<number>(suggested);
-  // PayPal's script loads only when its block nears the screen or someone taps an amount, never on first paint.
+  // PayPal's script loads only after someone taps an amount or the Chip in button (warm-up on pointerdown/focus).
   const [paypalWanted, setPaypalWanted] = useState(false);
-  const paypalSlot = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (paypalWanted || !paypalSlot.current) return;
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setPaypalWanted(true); }, { rootMargin: "400px" });
-    io.observe(paypalSlot.current);
-    return () => io.disconnect();
-  }, [paypalWanted]);
+  const [sdkReady, setSdkReady] = useState(false);
+  const warm = () => { void warmPaypal(currency).then(() => setSdkReady(true), () => setSdkReady(true)); };
+  const want = () => { warm(); setPaypalWanted(true); };
   const [custom, setCustom] = useState("");
   const [visibility, setVisibility] = useState<(typeof VIS)[number]["value"]>("named");
   const [displayName, setDisplayName] = useState("");
@@ -151,13 +147,13 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
     <div className="space-y-8">
       <section className="space-y-3">
         <p className="text-[15px] font-medium">How much?</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" onPointerDownCapture={warm} onFocusCapture={warm}>
           {chips.map((c) => (
-            <Chip key={c} selected={!custom && amount === c} onClick={() => { setAmount(c); setCustom(""); setPaypalWanted(true); }} tag={c === suggested ? "suggested" : undefined}>
+            <Chip key={c} selected={!custom && amount === c} onClick={() => { setAmount(c); setCustom(""); want(); }} tag={c === suggested ? "suggested" : undefined}>
               <span className="tabular">{formatMoney(c, currency)}</span>
             </Chip>
           ))}
-          <Input value={custom} onChange={(e) => { setCustom(e.target.value.replace(/[^0-9.]/g, "")); setPaypalWanted(true); }} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full text-center tabular" aria-label="Custom amount" />
+          <Input value={custom} onChange={(e) => { setCustom(e.target.value.replace(/[^0-9.]/g, "")); want(); }} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full text-center tabular" aria-label="Custom amount" />
         </div>
       </section>
 
@@ -216,11 +212,11 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
             <div className="h-12 rounded-[12px] shimmer" />
             <p className="text-center text-[14px] text-muted-foreground">Placing your hold with PayPal...</p>
           </div>
-        ) : !paypalWanted ? (
-          <div ref={paypalSlot} className="space-y-2" aria-busy="true" aria-label="Loading PayPal">
-            <div className="h-12 rounded-full shimmer" />
-            <div className="h-12 rounded-full shimmer" />
-          </div>
+        ) : !paypalWanted || !sdkReady ? (
+          <button type="button" onPointerDown={warm} onFocus={warm} onClick={want} disabled={paypalWanted} aria-busy={paypalWanted} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary text-[16px] font-medium text-primary-foreground disabled:opacity-80">
+            {paypalWanted && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+            {paypalWanted ? "Loading PayPal..." : `Chip in ${label}`}
+          </button>
         ) : (
           <PayPalHold
             currency={currency}

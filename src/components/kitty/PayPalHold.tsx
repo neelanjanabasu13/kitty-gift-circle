@@ -24,6 +24,14 @@ function loadSdk(clientId: string, currency: string) {
   return sdkPromise;
 }
 
+/** Warm-up: fetch the client id and start loading PayPal's script. Only called after a tap/focus on the chip-in controls. */
+let warmPromise: Promise<void> | null = null;
+export function warmPaypal(currency: string) {
+  if (warmPromise) return warmPromise;
+  warmPromise = getPayPalClientId().then(({ clientId }) => (clientId ? loadSdk(clientId, currency) : undefined)).catch((e) => { warmPromise = null; throw e; });
+  return warmPromise;
+}
+
 export function PayPalHold({
   currency,
   disabled,

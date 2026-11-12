@@ -1,3 +1,4 @@
+import { markPotActed } from "@/components/kitty/usePot";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -149,6 +150,7 @@ function VoteStage({ view, mine }: { view: PotView; mine?: Mine | null | undefin
           setBusy(true);
           try {
             await castFinalVote({ data: { contributionId: mine.contributionId, orderId: mine.orderId, candidateId: id } });
+            markPotActed(view.pot.slug);
             setMyVote(id ?? "none");
             toast.success(id ? "Vote in. You can change it until it closes." : "Got it. Kitty will choose for you.");
             qc.invalidateQueries({ queryKey: ["pot", view.pot.slug] });

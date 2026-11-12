@@ -1,5 +1,5 @@
 import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPot } from "@/lib/kitty.functions";
 
@@ -30,39 +30,39 @@ export function useLivePot(slug: string, adminToken?: string) {
   return q;
 }
 
+const ACTED_EVENT = "kitty:pot-acted";
+const actedAt = new Map<string, number>();
+/** Call after the user acts on a pot (chip-in, vote, withdraw): polling speeds up to 2.5s for 60s. */
+export function markPotActed(slug: string) {
+  actedAt.set(slug, Date.now());
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(ACTED_EVENT, { detail: slug }));
+}
+
 /**
- * Backup polling beside realtime: every 3s while Kitty is working or within 60s of a change,
- * 10s for the next few minutes, then 30s when idle. Paused while the tab is hidden; resumes on focus.
+ * Backup polling beside realtime: 10s from load; 2.5s for 60s after the user acts on this page,
+ * or while a Kitty run is in flight for this pot. Paused while the tab is hidden.
  */
 function usePolling(slug: string, data: any) {
   const qc = useQueryClient();
-  const lastChange = useRef(Date.now());
-  const sig = data ? JSON.stringify([data.pot?.status, data.raised, data.people, data.pot?.agent_working, data.events?.length]) : "";
   const working = !!data?.pot?.agent_working;
-  useEffect(() => { lastChange.current = Date.now(); }, [sig]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const interval = () => {
-      const since = Date.now() - lastChange.current;
-      return working || since < 60_000 ? 3_000 : since < 5 * 60_000 ? 10_000 : 30_000;
-    };
+    const interval = () => (working || Date.now() - (actedAt.get(slug) ?? 0) < 60_000 ? 2_500 : 10_000);
     const tick = () => {
       if (document.visibilityState !== "visible") return;
       qc.invalidateQueries({ queryKey: ["pot", slug] }, { cancelRefetch: false });
       timer = setTimeout(tick, interval());
     };
-    const resume = () => {
-      if (document.visibilityState !== "visible") { clearTimeout(timer); return; }
-      clearTimeout(timer);
-      tick();
-    };
+    const reschedule = () => { clearTimeout(timer); if (document.visibilityState === "visible") timer = setTimeout(tick, interval()); };
+    const resume = () => { clearTimeout(timer); if (document.visibilityState === "visible") tick(); };
+    const onActed = (e: Event) => { if ((e as CustomEvent).detail === slug) reschedule(); };
     timer = setTimeout(tick, interval());
     document.addEventListener("visibilitychange", resume);
-    window.addEventListener("focus", resume);
+    window.addEventListener(ACTED_EVENT, onActed);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", resume);
-      window.removeEventListener("focus", resume);
+      window.removeEventListener(ACTED_EVENT, onActed);
     };
   }, [slug, working, qc]);
 }
