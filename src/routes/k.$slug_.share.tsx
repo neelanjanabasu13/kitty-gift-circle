@@ -73,9 +73,24 @@ function SharePage() {
   };
   const copy = async (v: string, label = "Copied") => { if (await copyText(v)) toast.success(label); };
   const openOut = (url: string) => {
+    if (/^(mailto:|slack:)/.test(url)) {
+      let left = false;
+      const onBlur = () => { left = true; };
+      window.addEventListener("blur", onBlur, { once: true });
+      document.addEventListener("visibilitychange", onBlur, { once: true });
+      const el = document.createElement("a");
+      el.href = url; el.style.display = "none";
+      document.body.appendChild(el); el.click(); document.body.removeChild(el);
+      setTimeout(() => {
+        window.removeEventListener("blur", onBlur);
+        document.removeEventListener("visibilitychange", onBlur);
+        if (!left) setFallback({ kind: "open", value: url });
+      }, 1200);
+      return;
+    }
     let w: Window | null = null;
-    try { w = window.open(url, "_blank", "noopener"); } catch { w = null; }
-    if (w) return;
+    try { w = window.open(url, "_blank"); } catch { w = null; }
+    if (w) { try { w.opener = null; } catch { /* ignore */ } return; }
     try { if (window.top) { window.top.location.href = url; return; } } catch { /* blocked */ }
     setFallback({ kind: "open", value: url });
   };
@@ -105,10 +120,8 @@ function SharePage() {
           <div className="grid grid-cols-3 gap-2">
             <Button variant="quiet" size="tap" onClick={() => { toast("Opening WhatsApp"); openOut("https://wa.me/?text=" + encodeURIComponent(msg)); }}><MessageCircle /> WhatsApp</Button>
             <Button variant="quiet" size="tap" onClick={async () => {
-              if (await copyText(msg)) toast.success("Copied. Paste it in Slack.");
-              const t0 = Date.now();
+              if (await copyText(msg)) toast.success("Copied. Paste it in Slack.", { action: { label: "Open Slack in browser", onClick: () => openOut("https://app.slack.com/client") } });
               openOut("slack://open");
-              setTimeout(() => { if (document.hasFocus() && Date.now() - t0 < 1500) openOut("https://app.slack.com/client"); }, 600);
             }}><Hash /> Slack</Button>
             <Button variant="quiet" size="tap" onClick={() => { toast("Opening your email app"); openOut("mailto:?subject=" + encodeURIComponent("Chip in for " + name + "'s gift") + "&body=" + encodeURIComponent(msg)); }}><Mail /> Email</Button>
           </div>
