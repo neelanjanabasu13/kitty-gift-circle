@@ -45,4 +45,4 @@ use the editor.
 - Seeded demo contributions (`is_seeded` with no `authorization_id`) are detected by `isDemoHold` and never sent to PayPal; a pot with any demo money records a `demo` payout instead of paying out, so demo money is never presented as real.
 - Fixed-split pots store the organiser's chosen product as the single ranked candidate; the agent skips search and the closer goes straight to veto once the pot covers its price.
 - Ranking shows three different kinds of gift in the top 3 (`giftFamily` in scoring.ts groups kitchen/tableware categories), and the agent always adds broader non-like queries, so a shortlist never reads as one category.
-- The guided demo story lives in `src/lib/demoScript.ts` (pure cast/steps) and `advanceDemo` (one beat per call, driven by `DemoStoryBar` polling), reusing the real closing code; it never invents gift picks.
+- The /demo stage plays entirely client-side from `src/lib/demoTimeline.ts` (pure scenes, acts, split via `splitLines`) plus real saved Channel3 picks read once by `getDemoPicks`, so playback never waits on the server; the manage page stays a quiet admin view.
