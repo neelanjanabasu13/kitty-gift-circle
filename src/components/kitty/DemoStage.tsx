@@ -160,7 +160,7 @@ function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; 
 
 function SceneView({ id, t, picks, rowRefs }: { id: SceneId; t: number; picks: DemoPick[]; rowRefs: RefObject<(HTMLLIElement | null)[]> }) {
   switch (id) {
-    case "chip": return <ChipScene t={t} />;
+    case "chip": return <ChipScene t={t} picks={picks} />;
     case "shop50": case "shop100": return <ShopScene phase={id} t={t} picks={picks} />;
     case "vote": return <VoteScene t={t} picks={picks} />;
     case "veto": return <VetoScene t={t} pick={picks[0]!} />;
@@ -217,7 +217,7 @@ function Product({ pick, dim, note, children, lifted }: { pick: DemoPick; dim?: 
 }
 
 // ---------- Act 1: chip in ----------
-function ChipScene({ t }: { t: number }) {
+function ChipScene({ t, picks }: { t: number; picks: DemoPick[] }) {
   const n = chippedCount(t);
   const appear = (i: number) => CHIP_LEAD_MS + i * CHIP_GAP_MS;
   const flown = (i: number) => i < n && t - appear(i) > 900;
@@ -240,6 +240,17 @@ function ChipScene({ t }: { t: number }) {
                 );
               })}
             </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-[14px] border bg-card p-2 md:gap-3">
+          <p className="w-24 shrink-0 text-[12px] leading-tight text-muted-foreground md:w-32 md:text-[13px]">First ideas for the {money(DEMO_TARGET)} target</p>
+          <div className="flex min-w-0 flex-1 gap-2">
+            {picks.map((p, i) => (
+              <motion.div key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...POP, delay: 0.08 * i }} className="flex min-w-0 flex-1 items-center gap-1.5">
+                <img src={p.image_url} alt="" className="size-9 shrink-0 rounded-[8px] bg-background object-cover md:size-10" />
+                <span className="hidden min-w-0 truncate text-[12px] md:block">{p.category}</span>
+              </motion.div>
+            ))}
           </div>
         </div>
         <ul className="grid grid-cols-3 gap-2 md:gap-3">

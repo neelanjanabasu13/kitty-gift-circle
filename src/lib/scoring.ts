@@ -232,3 +232,26 @@ export function preselect<T extends { fit: number; category: string }>(items: T[
   for (let i = 0; out.length < n && lists.some((l) => l[i]); i++) for (const l of lists) if (l[i] && out.length < n) out.push(l[i]!);
   return out;
 }
+
+// ---------- seeded first ideas at the target budget ----------
+
+/** Popular gift kinds used to fill the first ideas when the organiser gave fewer than three likes. */
+export const POPULAR_GIFT_KINDS = ["cooking", "plants", "wellbeing", "books", "experiences", "tech"];
+
+/**
+ * One gift kind per first idea: up to three of the likes, topped up with popular kinds from different families.
+ * 3 likes: one each. 2 likes: both plus one popular. 1 like: it plus two popular. None: three popular.
+ */
+export function seedKinds(likes: string[]): string[] {
+  const out: string[] = [];
+  const fams = new Set<string>();
+  for (const l of likes.map((x) => x.trim().toLowerCase()).filter(Boolean)) {
+    if (out.length === 3) break;
+    if (!fams.has(giftFamily(l))) { out.push(l); fams.add(giftFamily(l)); }
+  }
+  for (const p of POPULAR_GIFT_KINDS) {
+    if (out.length === 3) break;
+    if (!fams.has(giftFamily(p))) { out.push(p); fams.add(giftFamily(p)); }
+  }
+  return out;
+}

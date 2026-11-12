@@ -560,6 +560,19 @@ export const triggerAgent = createServerFn({ method: "POST" })
     return runAgent(c.pot_id, { kind, who });
   });
 
+/** Shows first gift ideas at the target budget on a brand-new pot. Safe to call often: it does nothing once ideas exist. */
+export const warmPicks = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: pot } = await db.from("pots").select("id, status, mode, is_demo").eq("slug", data.slug).maybeSingle();
+    if (!pot || pot.status !== "collecting" || pot.mode === "fixed_split" || pot.is_demo) return { status: "ignored" as const };
+    const { count } = await db.from("candidates").select("id", { count: "exact", head: true }).eq("pot_id", pot.id);
+    if (count) return { status: "ignored" as const };
+    const { runAgent } = await agent();
+    return runAgent(pot.id, { kind: "seed" });
+  });
+
 export const runKittyNow = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ slug: z.string().max(80), adminToken: z.string().max(100) }).parse(d))
   .handler(async ({ data }) => {

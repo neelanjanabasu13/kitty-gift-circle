@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { TopBar } from "@/components/kitty/Logo";
 import { Missing } from "@/components/kitty/Missing";
 import { AgentTicker } from "@/components/kitty/AgentFeed";
+import { PicksGrid } from "@/components/kitty/PotLive";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
 import { formatMoney, shareMessage } from "@/lib/kitty";
 import { setReminders } from "@/lib/kitty.functions";
@@ -161,6 +162,13 @@ function SharePage() {
             </button>
           </div>
         </section>
+
+        {data.pot.mode !== "fixed_split" && (
+          <section aria-live="polite">
+            <h2 className="mb-3 text-[26px]">What Kitty has in mind</h2>
+            <PicksGrid view={data} compact />
+          </section>
+        )}
 
         <section className="divide-y border-y">
           <div className="flex min-h-16 items-center gap-3 py-3">

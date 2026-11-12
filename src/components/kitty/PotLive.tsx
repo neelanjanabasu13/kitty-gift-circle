@@ -61,7 +61,7 @@ export function PicksGrid({ view, compact = false }: { view: PotView; compact?: 
           {!view.config.shop
             ? "Gift search switches on once the shop key is added."
             : view.raised < 30
-              ? `No picks yet. I start looking once the pot reaches ${formatMoney(30, view.pot.currency)}.`
+              ? `Finding first ideas around ${formatMoney(view.pot.target_amount, view.pot.currency)}. They land here in a moment.`
               : "I'm looking for gifts now. Picks land here in a moment."}
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -74,7 +74,9 @@ export function PicksGrid({ view, compact = false }: { view: PotView; compact?: 
   }
   return (
     <>
-      {note && <p className="mb-4 text-[14px] text-muted-foreground">{note.message}</p>}
+      {picks.every((c) => c.band === "seed")
+        ? <p className="mb-4 text-[14px] text-muted-foreground">First ideas for the {formatMoney(view.pot.target_amount, view.pot.currency)} target. They change as people chip in and say what {view.pot.recipient_name} likes.</p>
+        : note && <p className="mb-4 text-[14px] text-muted-foreground">{note.message}</p>}
       <LayoutGroup>
         <div className={compact ? "grid grid-cols-1 gap-3 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-3"}>
           {picks.map((c) => (

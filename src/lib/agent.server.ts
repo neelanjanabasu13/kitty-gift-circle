@@ -1,9 +1,9 @@
 // Kitty's agent run: plan, search, clean, score, rank, store. Narrates every step to agent_events.
 import { BASE_CATEGORIES, MARKET, SEARCH_BANDS } from "./config";
 import { formatMoney } from "./kitty";
-import { bandFor, cleanProducts, guessCategory, preselect, provisionalFit, rank, signalsFor, templateQueries, topCategories, type Scored, type Signals } from "./scoring";
+import { bandFor, cleanProducts, seedKinds, guessCategory, preselect, provisionalFit, rank, signalsFor, templateQueries, topCategories, type Scored, type Signals } from "./scoring";
 
-export type Trigger = { kind: "authorized" | "withdrawn" | "vote" | "replan" | "manual"; who?: string | null };
+export type Trigger = { kind: "authorized" | "withdrawn" | "vote" | "replan" | "manual" | "seed"; who?: string | null };
 
 const LIVE = ["authorized", "reauthorized", "captured"];
 const LOCK_MS = 120_000;
@@ -89,9 +89,12 @@ async function runOnce(potId: string, trigger: Trigger) {
   else if (top2Changed && top2.length) reason = "votes";
   else if (!cached && band > 0) reason = "first";
 
-  if (reason && band === 0) {
-    if (trigger.kind === "manual" || trigger.kind === "replan") await say(potId, "waiting", `I'll start searching shops once the pot reaches ${money(30)}.`);
-    reason = null;
+  // Before the first price band, Kitty shows first ideas at the organiser's target budget instead of an empty shelf.
+  if (band === 0) {
+    const target = Number(pot.target_amount ?? 0);
+    if (!pot.is_demo && target > 0 && (!cached || trigger.kind === "replan" || trigger.kind === "manual")) await seedSearch(potId, pot, target);
+    await rerank(potId, target || raised, tally, trigger, cur, true);
+    return;
   }
 
   if (reason) {
@@ -102,6 +105,52 @@ async function runOnce(potId: string, trigger: Trigger) {
   }
 
   await rerank(potId, raised, tally, trigger, cur);
+}
+
+/** First ideas at the target budget: one gift kind each (likes first, then popular kinds), no AI wait. */
+async function seedSearch(potId: string, pot: any, target: number) {
+  const db = await admin();
+  if (!process.env["CHANNEL3_API_KEY"]) return false;
+  const { searchProducts } = await import("./channel3.server");
+  const kinds = seedKinds(pot.likes ?? []);
+  const money = (n: number) => formatMoney(n, pot.currency);
+  await working(potId, `Finding first ideas for ${pot.recipient_name} around ${money(target)}`);
+  const t0 = Date.now();
+  const queries = kinds.flatMap((k) => [{ k, q: `${k} gift` }, { k, q: `${k} gift set` }]);
+  const results = await Promise.all(queries.map(({ q }) => searchProducts({ query: q, potId, minPrice: target * 0.4, maxPrice: target, limit: 10 })));
+  const kindOf = new Map<string, string>();
+  results.forEach((r, i) => { if (r.status === "ok") for (const p of r.products) if (!kindOf.has(p.id)) kindOf.set(p.id, queries[i]!.k); });
+  const products = results.flatMap((r) => (r.status === "ok" ? r.products : []));
+  if (!products.length) { await working(potId, null); return false; }
+  const { kept } = cleanProducts(products, pot.dislikes ?? [], target, { country: MARKET.country, currency: pot.currency ?? MARKET.currency });
+  const likes: string[] = (pot.likes ?? []).map((l: string) => l.toLowerCase());
+  const wishText = `${pot.wishlist_url ?? ""}`.replace(/[-_/]/g, " ");
+  const seen = new Set<string>();
+  const rows = kept.filter(({ product }) => !seen.has(product.id) && seen.add(product.id)).map(({ product, offer }) => {
+    const kind = kindOf.get(product.id) ?? "home";
+    const theirs = likes.includes(kind);
+    return {
+      pot_id: potId,
+      channel3_product_id: product.id,
+      title: product.title.slice(0, 200),
+      image_url: product.image,
+      offer_url: offer.url,
+      retailer: offer.domain,
+      price: offer.price,
+      currency: offer.currency,
+      category: kind,
+      fit_score: Math.max(0.5, provisionalFit(product.title, product.category, likes.length ? likes : [kind], product.rating, product.reviewCount)),
+      reason: theirs ? `A first idea for ${pot.recipient_name}'s love of ${kind}, within the ${money(target)} target.` : `A popular ${kind} gift while I learn more about ${pot.recipient_name}.`,
+      band: "seed",
+      signals: signalsFor(product, offer, wishText) as any,
+      fetched_at: new Date().toISOString(),
+    };
+  });
+  await db.from("candidates").delete().eq("pot_id", potId);
+  if (rows.length) await db.from("candidates").insert(rows);
+  await say(potId, "seeded", `Here are some first ideas around ${money(target)}. They'll change as people chip in and tell me what ${pot.recipient_name} likes.`, { kinds, found: rows.length, timings: { total: Date.now() - t0 } });
+  await working(potId, null);
+  return true;
 }
 
 /** Timings from the latest live search per pot, attached to the next "reranked" event. */

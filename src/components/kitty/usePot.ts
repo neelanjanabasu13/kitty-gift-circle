@@ -1,7 +1,7 @@
 import { queryOptions, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getPot } from "@/lib/kitty.functions";
+import { getPot, warmPicks } from "@/lib/kitty.functions";
 
 export const potQuery = (slug: string, adminToken?: string) =>
   queryOptions({
@@ -27,6 +27,7 @@ export function useLivePot(slug: string, adminToken?: string) {
     };
   }, [potId, slug, qc]);
   usePolling(slug, q.data);
+  useFirstIdeas(slug, q.data);
   return q;
 }
 
@@ -65,4 +66,17 @@ function usePolling(slug: string, data: any) {
       window.removeEventListener(ACTED_EVENT, onActed);
     };
   }, [slug, working, qc]);
+}
+
+const warmed = new Set<string>();
+/** A brand-new pot with no gift ideas yet asks Kitty once for first ideas at the target budget. */
+function useFirstIdeas(slug: string, data: any) {
+  const qc = useQueryClient();
+  const empty = !!data && data.pot?.status === "collecting" && data.pot?.mode !== "fixed_split" && !data.pot?.is_demo && !(data.candidates?.length) && !!data.config?.shop;
+  useEffect(() => {
+    if (!empty || warmed.has(slug)) return;
+    warmed.add(slug);
+    markPotActed(slug);
+    void warmPicks({ data: { slug } }).then(() => qc.invalidateQueries({ queryKey: ["pot", slug] }), () => warmed.delete(slug));
+  }, [empty, slug, qc]);
 }
