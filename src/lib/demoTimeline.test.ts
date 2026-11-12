@@ -11,9 +11,9 @@ describe("demo stage timeline", () => {
     const firstIdx = SCENES.map((s) => DEMO_ACTS.findIndex((a) => a.id === s.act));
     expect([...firstIdx].sort((a, b) => a - b)).toEqual(firstIdx);
   });
-  it("runs about a minute (55 to 65 seconds)", () => {
-    expect(DEMO_TOTAL_MS).toBeGreaterThanOrEqual(55_000);
-    expect(DEMO_TOTAL_MS).toBeLessThanOrEqual(65_000);
+  it("ends at 63 seconds, with no hold after the five-second veto", () => {
+    expect(DEMO_TOTAL_MS).toBe(63_000);
+    expect(SCENES.find((s) => s.id === "veto")?.ms).toBe(5000);
   });
   it("first chip-in lands within 300ms and the rest every 1.2s", () => {
     expect(CHIP_LEAD_MS).toBeLessThanOrEqual(300);

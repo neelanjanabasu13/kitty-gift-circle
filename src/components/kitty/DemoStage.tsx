@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Check, SkipForward, ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { KittyMascot, PAYPAL_BLUES, type MascotState } from "./KittyMascot";
+import { KittyMascot, type MascotState } from "./KittyMascot";
 import { PayPalWordmark } from "./Logo";
 import { CountUp } from "./PotMeter";
 import { formatMoney } from "@/lib/kitty";
@@ -34,12 +34,15 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
   useEffect(() => {
     if (!playing || ended) return;
     let last = performance.now();
-    const id = setInterval(() => {
-      const now = performance.now();
-      setElapsed((e) => Math.min(DEMO_TOTAL_MS, e + (now - last)));
+    let id: number;
+    const frame = (now: number) => {
+      const delta = now - last;
       last = now;
-    }, 100);
-    return () => clearInterval(id);
+      setElapsed((e) => Math.min(DEMO_TOTAL_MS, e + delta));
+      id = requestAnimationFrame(frame);
+    };
+    id = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(id);
   }, [playing, ended]);
 
   const at = sceneAt(elapsed);
@@ -60,18 +63,18 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
           <ActBar elapsed={elapsed} actIdx={actIdx} onJump={jump} />
         </header>
 
-        <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-4 px-5 py-4 md:grid-cols-[280px_minmax(0,1fr)] md:gap-10 md:px-8">
+        <main className={at?.scene.id === "ribbon" ? "mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center gap-4 px-5 py-4 md:px-8" : "mx-auto grid w-full max-w-6xl flex-1 items-center gap-4 px-5 py-4 md:grid-cols-[280px_minmax(0,1fr)] md:gap-10 md:px-8"}>
           {ended ? (
             <div className="md:col-span-2"><EndScreen onAgain={restart} /></div>
           ) : (
             <>
-              <div className="flex justify-center md:justify-start">
+              <div className={at?.scene.id === "ribbon" ? "flex justify-center" : "flex justify-center md:justify-start"}>
                 <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
                   items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
               </div>
-              <div className="min-w-0">
+              <div className={at?.scene.id === "ribbon" ? "min-w-0 md:col-span-2" : "min-w-0"}>
                 <AnimatePresence mode="wait" initial={false}>
-                  <motion.div key={stageKey} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18, ease: EASE }} className="min-h-[360px] md:min-h-[440px]">
+                  <motion.div key={stageKey} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18, ease: EASE }} className={at?.scene.id === "ribbon" ? "" : "min-h-[360px] md:min-h-[440px]"}>
                     <SceneView id={at!.scene.id} t={at!.t} picks={order} />
                   </motion.div>
                 </AnimatePresence>
@@ -419,39 +422,8 @@ function RowsScene({ t, price }: { t: number; price: number }) {
 
 // ---------- Act 5: wrapped ----------
 function RibbonScene({ t }: { t: number }) {
-  const reduce = useReducedMotion();
-  // Driven by the stage clock, so pause freezes the knot mid-tie.
-  const clamp = (x: number) => Math.max(0, Math.min(1, x));
-  const down = reduce ? 1 : clamp((t - 300) / 800);
-  const across = reduce ? 1 : clamp((t - 1100) / 700);
-  const tied = reduce || t > 2000;
-  const burst = reduce ? 0 : clamp((t - 2050) / 1300);
-  const line = { transition: "stroke-dashoffset 120ms linear" };
-  return (
-    <div className="grid place-items-center pt-4">
-      <svg viewBox="0 0 200 180" className="w-[220px] md:w-[320px]" style={{ overflow: "visible" }} aria-label="A kraft gift box tied with a blue ribbon" role="img">
-        <defs>
-          <linearGradient id="demo-ribbon" gradientUnits="userSpaceOnUse" x1="22" y1="40" x2="178" y2="170">
-            {PAYPAL_BLUES.map((c, i) => <stop key={c} offset={`${i * 50}%`} stopColor={c} />)}
-          </linearGradient>
-        </defs>
-        <rect x="30" y="70" width="140" height="100" rx="6" fill="var(--kraft)" stroke="var(--foreground)" strokeWidth="2.5" />
-        <rect x="22" y="56" width="156" height="24" rx="5" fill="var(--kraft)" stroke="var(--foreground)" strokeWidth="2.5" />
-        <path d="M100 56 V170" stroke="url(#demo-ribbon)" strokeWidth="14" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - down} style={line} />
-        <path d="M22 68 H178" stroke="url(#demo-ribbon)" strokeWidth="12" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - across} style={line} />
-        <g style={{ transformBox: "fill-box", transformOrigin: "50% 100%", transform: `scale(${tied ? 1 : 0})`, transition: "transform 420ms cubic-bezier(0.34, 1.9, 0.64, 1)" }}>
-          <path d="M100 54 C84 30 62 36 70 52 C74 60 90 58 100 54 Z M100 54 C116 30 138 36 130 52 C126 60 110 58 100 54 Z" fill="url(#demo-ribbon)" stroke="var(--foreground)" strokeWidth="2" />
-          <rect x="93" y="48" width="14" height="12" rx="3" fill={PAYPAL_BLUES[0]} />
-        </g>
-        {burst > 0 && burst < 1 && Array.from({ length: 16 }).map((_, i) => {
-          const a = (i / 16) * Math.PI * 2;
-          const e = 1 - (1 - burst) ** 3;
-          return <rect key={i} x={98 + Math.cos(a) * 90 * e} y={50 + (Math.sin(a) * 60 - 30) * e} width={5} height={9} rx={1}
-            fill={i % 2 ? "var(--kraft-deep)" : PAYPAL_BLUES[i % 3]} opacity={1 - burst} transform={`rotate(${220 * e} ${100 + Math.cos(a) * 90 * e} ${54 + (Math.sin(a) * 60 - 30) * e})`} />;
-        })}
-      </svg>
-    </div>
-  );
+  // The mascot ties its own box; do not duplicate the action on a separate prop.
+  return <span className="sr-only">{t < 2000 ? "Kitty pulls the ribbon and bows" : "The gift is wrapped"}</span>;
 }
 
 function CardScene({ t }: { t: number }) {

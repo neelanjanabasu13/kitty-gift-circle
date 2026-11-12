@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useId, useMemo, useState, lazy, Suspense } from "react";
+import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { AnimatePresence, motion, useReducedMotion, useSpring } from "motion/react";
 const Confetti = lazy(() => import("./MascotConfetti"));
 
@@ -101,8 +101,8 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   // Paw hovers, then two dainty taps on the bell.
   veto: { dur: 3, times: [0, 0.5, 0.6, 0.7, 0.8, 1], a: [-22, -22, -8, -22, -8, -22], b: [-10, -10, 4, -10, 4, -10] },
   // Wrapping: pull the ribbon down, loop it over, tug it tight.
-  buying: { dur: 3.8, once: true, times: [0, 0.26, 0.52, 0.68, 0.76, 0.9, 1],
-    a: [12, -58, -95, -40, -50, -50, 12], b: [12, 35, 45, 65, 50, 50, 12], head: [0, 0, -4, 0, 0, 24, 0] },
+  buying: { dur: 2, once: true, times: [0, 0.1, 0.4, 0.5, 0.6, 0.8, 1],
+    a: [12, 20, -95, -40, 12, 12, 12], b: [12, 18, 45, 65, 12, 12, 12], head: [0, 0, -4, 0, 24, 24, 0] },
 };
 
 /** Where the glove is in view space for a shoulder (a) and elbow (b) angle, so flying items land in it. */
@@ -168,20 +168,23 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
     if (s === "vote" && !thumbs.length) return undefined;
     if (s === "searching" && thumbs.length) { const b = browse(thumbs.map((_, i) => `thumb${i}` as Prop)); return { ...b, dur: thumbs.length * 1.6 }; }
     const base = ACTS[s];
-    if (s === "ranking" && base && thumbs.length > 1) return { ...base, props: [{ k: "thumb1", o: base.props![0]!.o }, { k: "thumb0", o: base.props![1]!.o }] };
+    if (s === "ranking" && base && thumbs.length > 1 && base.props?.[0] && base.props?.[1]) return { ...base, props: [{ k: "thumb1", o: base.props[0].o }, { k: "thumb0", o: base.props[1].o }] };
     return base;
   }, [reduce, s, beat, itemKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Which held prop is visible, driven by a clock on the same timeline as the arm keyframes.
   const [phase, setPhase] = useState(0);
+  const [clockMs, setClockMs] = useState(0);
   const shoulder = useSpring(act?.a[0] ?? arm.a, LIMB);
   const elbow = useSpring(act?.b[0] ?? arm.b, LIMB);
   const head = useSpring(0, SPRING);
   const tail = useSpring(0, { stiffness: 75, damping: 15, mass: 1.2 });
+  const releasePoint = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!act) return;
     const t0 = performance.now();
     const id = setInterval(() => {
       const raw = (performance.now() - t0) / 1000 / act.dur;
+      setClockMs((performance.now() - t0));
       const p = act.once && beat !== undefined ? Math.min(1, raw) : raw % 1;
       setPhase(p);
       shoulder.set(sample(act.a, act.times, p));
@@ -200,8 +203,18 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
     return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - (act.times[i] ?? 0) < ((act.times[i + 1] ?? 1) - (act.times[i] ?? 0)) / 2;
   };
 
-  // Box rim squashes and springs back when something lands in it.
-  const rimBump = !act ? 0 : s === "chipIn" ? sample([0, 0, 1, -0.4, 0], [0, 0.7, 0.76, 0.86, 1], phase) : s === "vote" ? sample([0, 0, 1, -0.4, 0], [0, 0.78, 0.84, 0.92, 1], phase) : 0;
+  // Detach the object from the glove before it lowers, then render behind the box front.
+  const actionMs = phase * (act?.dur ?? 0) * 1000;
+  const dropStart = s === "chipIn" ? 700 : 1116;
+  const dropping = !!act && (s === "chipIn" || s === "vote") && actionMs >= dropStart && actionMs < dropStart + 400;
+  const dropU = Math.max(0, Math.min(1, (actionMs - dropStart) / 400));
+  const dropPhase = dropStart / ((act?.dur ?? 1) * 1000);
+  if (actionMs < dropStart) releasePoint.current = glovePos(shoulder.get(), elbow.get());
+  const dropFrom = releasePoint.current ?? glovePos(act ? sample(act.a, act.times, dropPhase) : 0, act ? sample(act.b, act.times, dropPhase) : 0);
+  const dropX = dropFrom.x + (109 - dropFrom.x) * dropU;
+  const dropY = dropFrom.y - (s === "vote" ? 12 : 2) + (158 - dropFrom.y + (s === "vote" ? 12 : 2)) * dropU * dropU;
+  const rimScale = !act || (s !== "chipIn" && s !== "vote") ? 1 : sample([1, 0.94, 1.04, 1], [0, 0.25, 0.6, 1], Math.max(0, Math.min(1, (actionMs - dropStart - 400) / 300)));
+  const bowDrop = s === "buying" && !reduce ? sample([0, 0, 48, 48, 0], [0, 0.5, 0.6, 0.8, 1], phase) : 0;
 
   return (
     <span className={className} style={{ display: "inline-block", width: size, height: size }} role="img" aria-label={label ?? `Kitty, ${describe(s)}`}>
@@ -225,10 +238,10 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             transition={Array.isArray(tailD) ? { duration: 5.5, repeat: Infinity, ease: SILK } : t({ duration: 0.9, ease: SILK })} />
 
           {/* The butler */}
-          <motion.g animate={{ y: s === "buying" ? 2 : 0 }} transition={SPRING}>
+          <g data-bowing={s === "buying" ? "true" : undefined} transform={`translate(0 ${bowDrop * 0.25})`}>
             {/* torso, breathing */}
             <motion.g style={{ originX: "98px", originY: "132px", transformBox: "view-box" }}
-              animate={{ scaleY: s === "idle" ? R([1, 1.018, 1], 1) : s === "done" ? 0.94 : 1 }}
+              animate={{ scaleY: s === "buying" ? 1 - bowDrop / 180 : s === "idle" ? R([1, 1.018, 1], 1) : s === "done" ? 0.94 : 1 }}
               transition={s === "idle" ? loop(4.2) : SPRING}>
               <path d="M86 68 C78 84 74 108 76 134 L120 134 C122 108 116 84 106 68 Z" fill={INK} />
               <path d="M90 71 L97 102 L104 71 Z" fill={PAPER} />
@@ -241,7 +254,7 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
 
             {/* head */}
             <motion.g style={{ originX: "96px", originY: "70px", transformBox: "view-box", ...(act ? { rotate: head } : {}) }}
-              animate={act ? { y: 0 } :
+              animate={act ? { y: bowDrop * 0.75 } :
                 s === "chipIn" ? { rotate: 6, y: 2 }
                 : s === "done" ? R({ y: [0, 10, 10, 0], rotate: [0, 6, 6, 0] }, { y: 10, rotate: 6 })
                 : s === "searching" && act ? { rotate: browseHead(act), y: 0 }
@@ -276,7 +289,7 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
                 transition={s === "cancelled" ? loop(1.3) : t(LIMB)}>
                 <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
                 {/* props held in the glove */}
-                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`} data-held-item={pr.k} transform={`translate(131 115) rotate(${-shoulder.get() - elbow.get()}) scale(${pr.k === "coin" || pr.k.startsWith("thumb") ? 1 : 2.2}) translate(-131 -115)`}>{pr.k.startsWith("thumb") ? <Thumb href={thumbs[Number(pr.k.slice(5))] ?? ""} uid={uid} i={Number(pr.k.slice(5))} x={131} y={100} /> : PROPS[pr.k]}</g> : null)}
+                {act?.props?.map((pr, i) => propOn(pr.o) && !((s === "chipIn" || s === "vote") && actionMs >= dropStart) ? <g key={`${s}-${i}`} data-held-item={pr.k} transform={`translate(131 115) rotate(${-shoulder.get() - elbow.get()}) scale(${pr.k === "coin" || pr.k.startsWith("thumb") ? 1 : 2.2}) translate(-131 -115)`}>{pr.k.startsWith("thumb") ? <Thumb href={thumbs[Number(pr.k.slice(5))] ?? ""} uid={uid} i={Number(pr.k.slice(5))} x={131} y={100} /> : PROPS[pr.k]}</g> : null)}
                 {/* white glove */}
                 <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
                 <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
@@ -290,7 +303,7 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
                 )}
               </motion.g>
             </motion.g>
-          </motion.g>
+          </g>
 
           {/* Coins inside, peeking over the rim as the pot fills; they float out when cancelled */}
           {Array.from({ length: coins }).map((_, i) => (
@@ -305,24 +318,37 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             ))}
           </g>}
 
-          {/* Box */}
-          <g transform={`translate(109 182) scale(${1 + 0.03 * rimBump} ${1 - 0.07 * rimBump}) translate(-109 -182)`}>
+          {dropping && <g data-box-drop={s} transform={`translate(${dropX} ${dropY}) scale(${1 - dropU * 0.24})`}>
+            {s === "chipIn" ? <Coin cx={0} cy={0} /> : <Thumb href={thumbs[0] ?? ""} uid={uid} i={0} x={0} y={0} />}
+          </g>}
+
+          {/* Opaque box front occludes the falling object, rather than fading it away. */}
+          <g>
             <rect x={58} y={128} width={102} height={54} rx={5} fill={KRAFT} stroke={INK} strokeWidth={2} />
             <path d="M58 138 L160 138" stroke={KRAFT_DEEP} strokeWidth={1.2} opacity={0.5} />
+          </g>
+          <g data-box-rim transform={`translate(109 132) scale(1 ${rimScale}) translate(-109 -132)`}>
+            <rect x={56} y={126} width={106} height={9} rx={3} fill={KRAFT} stroke={INK} strokeWidth={2} />
           </g>
           <motion.rect x={102} y={128} width={14} height={54} fill={`url(#${grad})`}
             style={{ originX: "109px", originY: "128px", transformBox: "view-box" }}
             initial={false}
             animate={{ scaleY: ribbonOn ? (s === "buying" ? R([0, 1], 1) : 1) : 0, opacity: ribbonOn ? 1 : 0 }}
-            transition={s === "buying" ? t({ duration: 0.9, ease: SILK, repeat: beat === undefined ? Infinity : 0, repeatDelay: 2.9 }) : t({ duration: 0.9, ease: SILK })} />
+            transition={s === "buying" ? t({ duration: 0.6, ease: SILK, repeat: beat === undefined ? Infinity : 0, repeatDelay: 1.4 }) : t({ duration: 0.9, ease: SILK })} />
 
           {s === "buying" && <path d="M58 146 H160" stroke={`url(#${grad})`} strokeWidth={10} pathLength={1}
-            strokeDasharray="1 1" strokeDashoffset={reduce ? 0 : 1 - Math.min(1, phase / 0.26)} />}
+            strokeDasharray="1 1" strokeDashoffset={reduce ? 0 : 1 - Math.max(0, Math.min(1, (actionMs - 200) / 600))} />}
+          {s === "buying" && !reduce && actionMs >= 200 && actionMs < 1000 && (() => {
+            const g = glovePos(shoulder.get(), elbow.get());
+            return <path data-ribbon-pull d={`M109 128 Q${g.x - 20} ${g.y + 26} ${g.x} ${g.y}`} fill="none" stroke={`url(#${grad})`} strokeWidth={8} strokeLinecap="round" />;
+          })()}
 
           {s === "counting" && <g aria-hidden>
-            {[0, 1, 2].map((i) => {
-              const slide = reduce ? 1 : Math.max(0, Math.min(1, (phase - 0.76 - i * 0.025) / 0.16));
-              return <motion.g key={i} animate={{ x: slide * (58 + i * 22), y: slide * (18 + i * 16), opacity: reduce || phase > 0.76 ? 1 : 0 }} transition={t(LIMB)}><Coin cx={150} cy={124} /></motion.g>;
+            {[0, 1, 2, 3].map((i) => {
+              const start = 1050 + i * 150;
+              const slide = reduce ? 1 : Math.max(0, Math.min(1, (actionMs - start) / 900));
+              const ease = slide * slide * (3 - 2 * slide);
+              return <g key={i} data-released-coin={i} transform={`translate(${ease * (160 + i * 15)} ${ease * (18 + i * 22)})`} opacity={reduce || actionMs >= start ? 1 : 0}><Coin cx={109} cy={124} /></g>;
             })}
           </g>}
 
@@ -344,7 +370,7 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
           <motion.g style={{ originX: "109px", originY: "128px", transformBox: "view-box" }} initial={false}
             animate={
               s === "cancelled" ? { scale: R(0, 0.6), rotate: 50, opacity: R(0, 0.4) }
-              : s === "buying" ? { scale: reduce ? 1 : sample([0, 0, 1.18, 1, 1], [0, 0.52, 0.68, 0.76, 1], phase), rotate: 0, opacity: 1 }
+              : s === "buying" ? { scale: reduce ? 1 : sample([0, 0, 1.18, 1, 1], [0, 0.4, 0.46, 0.5, 1], phase), rotate: 0, opacity: 1 }
               : s === "done" ? { scale: 1.1, y: R([0, -7, 0], 0), rotate: 0, opacity: 1 }
               : { scale: 1, y: 0, rotate: 0, opacity: 1 }
             }
@@ -359,11 +385,26 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
           </motion.g>
 
           {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
-          {s === "buying" && !reduce && phase > 0.66 && <Suspense fallback={null}><Confetti once colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
+          {s === "buying" && !reduce && <WrappingConfetti ms={clockMs} />}
         </motion.svg>
       </AnimatePresence>
     </span>
   );
+}
+
+/** Burst from Kitty's own bow, with gravity and a 440px desktop spread. */
+function WrappingConfetti({ ms }: { ms: number }) {
+  const u = Math.max(0, Math.min(1, (ms - 900) / 2000));
+  if (ms < 900 || u >= 1) return null;
+  const colors = [...PAYPAL_BLUES, KRAFT, INK];
+  return <g data-wrapping-confetti aria-hidden>{Array.from({ length: 48 }, (_, i) => {
+    const angle = (i / 48) * Math.PI * 2;
+    const vx = Math.cos(angle) * (240 + (i % 5) * 9);
+    const vy = -100 + Math.sin(angle) * 95;
+    const x = 109 + vx * u;
+    const y = 128 + vy * u + 155 * u * u;
+    return <rect key={i} x={x - 4} y={y - 3} width={6 + i % 4} height={8} rx={1} fill={colors[i % colors.length]} opacity={u < 0.85 ? 1 : (1 - u) / 0.15} transform={`rotate(${u * (360 + i * 13)} ${x} ${y})`} />;
+  })}</g>;
 }
 
 /** A gift photo on a white card with a soft shadow, centred on (x, y); 50 units = 64px+ at 260px. */
