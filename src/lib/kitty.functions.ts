@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { DEFAULT_CURRENCY } from "./config";
+import { DEFAULT_CURRENCY, MARKET } from "./config";
 import { DEMO_CAST, DEMO_GAP_MS, DEMO_SEARCH_AT, DEMO_STORY_FACTOR, DEMO_TOTAL, demoLine, demoStage } from "./demoScript";
 import { DEMO_FACTOR, effectiveDeadline, isDemoHold, scaleMs, storedDeadlineFor } from "./closing";
 
@@ -491,7 +491,7 @@ export const healthCheck = createServerFn({ method: "POST" }).handler(async () =
     token: { ok: boolean; error?: string };
     order: { ok: boolean; id?: string; status?: string; error?: string };
     database: { ok: boolean; error?: string };
-    shop: { ok: boolean; offers?: number; products?: number; error?: string };
+    shop: { ok: boolean; offers?: number; products?: number; examples?: string[]; summary?: string; error?: string };
     ai: { ok: boolean; error?: string };
   } = { secrets, currency: DEFAULT_CURRENCY, token: { ok: false }, order: { ok: false }, database: { ok: false }, shop: { ok: false }, ai: { ok: false } };
 
@@ -499,8 +499,11 @@ export const healthCheck = createServerFn({ method: "POST" }).handler(async () =
   const { searchProducts } = await import("./channel3.server");
   const sr = await searchProducts({ query: "ceramic coffee mug", potId: "health-check", minPrice: 5, maxPrice: 80, limit: 10 });
   if (sr.status === "ok") {
-    const offers = sr.products.flatMap((p) => p.offers).filter((o) => o.inStock && o.currency === "GBP" && /\.uk$/i.test(o.domain));
-    result.shop = { ok: true, products: sr.products.length, offers: offers.length };
+    const { isForeignShop } = await import("./scoring");
+    const home = (o: { inStock: boolean; currency: string; domain: string }) => o.inStock && o.currency === DEFAULT_CURRENCY && !isForeignShop(o.domain, MARKET.country);
+    const withUk = sr.products.filter((p) => p.offers.some(home));
+    const examples = Array.from(new Set(withUk.flatMap((p) => p.offers.filter(home).map((o) => o.domain)))).slice(0, 3);
+    result.shop = { ok: true, products: sr.products.length, offers: withUk.length, examples, summary: `${withUk.length} of ${sr.products.length} products have an in-stock UK offer` };
   } else result.shop = { ok: false, error: sr.status === "not_configured" ? "key missing" : sr.message };
 
   // Lovable AI check: one tiny completion.

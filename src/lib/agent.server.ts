@@ -12,7 +12,8 @@ const admin = async () => (await import("@/integrations/supabase/client.server")
 
 async function say(potId: string, kind: string, message: string, payload: Record<string, unknown> = {}) {
   const db = await admin();
-  await db.from("agent_events").insert({ pot_id: potId, kind, message, payload: payload as any });
+  const { data } = await db.from("agent_events").insert({ pot_id: potId, kind, message, payload: payload as any }).select("id").maybeSingle();
+  return data?.id as string | undefined;
 }
 async function working(potId: string, text: string | null) {
   const db = await admin();
@@ -102,6 +103,9 @@ async function runOnce(potId: string, trigger: Trigger) {
   await rerank(potId, raised, tally, trigger, cur);
 }
 
+/** Timings from the latest live search per pot, attached to the next "reranked" event. */
+const lastTimings = new Map<string, Record<string, number>>();
+
 async function search(potId: string, pot: any, raised: number, top2: string[], replaceAll: boolean) {
   const db = await admin();
   const { searchProducts } = await import("./channel3.server");
@@ -119,6 +123,7 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
     wishlist: pot.wishlist_url, topVoted: top2, pot: raised, currency: pot.currency,
   };
 
+  const t0 = Date.now();
   await working(potId, `Thinking about ${(profile.likes.slice(0, 2).join(" and ") || "what they love")}`);
   let queries: string[];
   try {
@@ -127,6 +132,7 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
     console.error(e);
     queries = [...profile.likes, ...top2].slice(0, 4).map((l: string) => `${l} gift`);
   }
+  const tPlan = Date.now() - t0;
   if (!queries.length) queries = ["thoughtful gift"];
   // Always look beyond the likes' own kind of gift, so the shortlist can show three different kinds.
   const { giftFamily } = await import("./scoring");
@@ -139,11 +145,13 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
   await working(potId, `Looking through shops for ${topic} gifts under ${money(raised)}`);
   // Search a little above the pot too, so a "next unlock" gift exists; ranking still only shows what the pot covers.
   const stretch = Math.round(Math.max(raised * 1.3, SEARCH_BANDS.find((b) => b > raised) ?? raised * 1.3));
+  const tS = Date.now();
   const results = await Promise.all(queries.map((q) => searchProducts({ query: q, potId, minPrice: raised * 0.5, maxPrice: stretch, limit: 10 })));
   const failed = results.filter((r) => r.status === "error").length;
   const products = results.flatMap((r) => (r.status === "ok" ? r.products : []));
   const domains = new Set(products.flatMap((p) => p.offers.map((o) => o.domain)));
-  await say(potId, "searched", `I looked through ${domains.size || queries.length} shops for ${topic} gifts under ${money(raised)}.${failed ? ` ${failed} search${failed === 1 ? "" : "es"} didn't come back.` : ""}`, { found: products.length });
+  const tSearch = Date.now() - tS;
+  const searchedId = await say(potId, "searched", `I looked through ${domains.size || queries.length} shops for ${topic} gifts under ${money(raised)}.${failed ? ` ${failed} search${failed === 1 ? "" : "es"} didn't come back.` : ""}`, { found: products.length, timings: { plan: tPlan, search: tSearch, total: Date.now() - t0 } });
   if (!products.length) return failed < results.length;
 
   const { kept, dropped } = cleanProducts(products, profile.dislikes, stretch, { country: MARKET.country, currency: pot.currency ?? MARKET.currency });
@@ -153,7 +161,9 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
   const categories = Array.from(new Set([...BASE_CATEGORIES, ...profile.likes.map((l: string) => l.toLowerCase())]));
   await working(potId, `Weighing up ${kept.length} gifts for ${pot.recipient_name}`);
   const items = kept.slice(0, 40).map(({ product, offer }) => ({ id: product.id, title: product.title, category: product.category, price: offer.price, retailer: offer.domain }));
+  const tSc = Date.now();
   const scores = await scoreCandidates(profile, categories, items);
+  const tScore = Date.now() - tSc;
   const byId = new Map(scores.map((s) => [s.id, s]));
   const aiDropped = scores.filter((s) => s.dislike).length;
   if (aiDropped) await say(potId, "dropped", `Left out ${aiDropped} more that ${pot.recipient_name} wouldn't love.`);
@@ -183,6 +193,7 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
     })
     .filter(Boolean) as any[];
 
+  const tW = Date.now();
   if (replaceAll) await db.from("candidates").delete().eq("pot_id", potId);
   else await db.from("candidates").delete().eq("pot_id", potId).eq("band", bandLabel);
   // Avoid duplicates across bands
@@ -190,6 +201,9 @@ async function search(potId: string, pot: any, raised: number, top2: string[], r
   const have = new Set((existing ?? []).map((e) => e.channel3_product_id));
   const fresh = rows.filter((r) => !have.has(r.channel3_product_id));
   if (fresh.length) await db.from("candidates").insert(fresh);
+  const timings = { plan: tPlan, search: tSearch, score: tScore, write: Date.now() - tW, total: Date.now() - t0 };
+  lastTimings.set(potId, timings);
+  if (searchedId) await db.from("agent_events").update({ payload: { found: products.length, timings } as any }).eq("id", searchedId);
   return true;
 }
 
@@ -219,7 +233,9 @@ async function rerank(potId: string, raised: number, tally: Record<string, numbe
   const msg = newTop.length === 0
     ? `Nothing fits under ${formatMoney(raised, currency)} yet. I'll wait for the pot to grow.`
     : `I reshuffled the picks ${why}.${leadMoved ? ` The ${short(lead!.title)} is top now.` : ""}`;
-  await say(potId, "reranked", msg, { top: newTop });
+  const timings = lastTimings.get(potId);
+  lastTimings.delete(potId);
+  await say(potId, "reranked", msg, timings ? { top: newTop, timings } : { top: newTop });
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -264,7 +280,8 @@ async function reuseDemoPicks(potId: string, pot: any, raised: number, replaceAl
     const { data: rows } = await db.from("candidates").select("channel3_product_id, title, image_url, offer_url, retailer, price, currency, category, fit_score, reason, signals, fetched_at").eq("pot_id", d.id).lte("price", stretch).gte("price", raised * 0.5);
     if (!rows || rows.length < 6) continue;
     const bandLabel = String(bandFor(raised));
-    if (replaceAll) await db.from("candidates").delete().eq("pot_id", potId);
+    const tW = Date.now();
+  if (replaceAll) await db.from("candidates").delete().eq("pot_id", potId);
     const { data: existing } = await db.from("candidates").select("channel3_product_id").eq("pot_id", potId);
     const have = new Set((existing ?? []).map((e) => e.channel3_product_id));
     const fresh = rows.filter((r) => !have.has(r.channel3_product_id)).map((r) => ({ ...r, pot_id: potId, band: bandLabel }));

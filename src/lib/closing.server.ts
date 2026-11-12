@@ -261,24 +261,26 @@ async function buy(pot: any) {
     const held = await heldTotal(pot.id);
     const { refreshOffer } = await import("./channel3.server");
     // Demo pots skip the live recheck (about 40s); real pots always recheck.
+    const tR = Date.now();
     const r = pick.channel3_product_id && !pot.is_demo
       ? await refreshOffer({ productId: pick.channel3_product_id, title: pick.title, retailer: pick.retailer, potId: pot.id, maxPrice: held })
       : ({ status: "not_configured" } as const);
+    const timings = { refresh: Date.now() - tR };
     if (r.status === "ok") {
       if (!r.inStock || cents(r.price) > cents(held)) {
-        await say(pot.id, "prebuy_moved", `${short(pick.title)} ${!r.inStock ? "has sold out" : `went up to ${money(r.price)}`}. Moving to the next pick.`);
+        await say(pot.id, "prebuy_moved", `${short(pick.title)} ${!r.inStock ? "has sold out" : `went up to ${money(r.price)}`}. Moving to the next pick.`, { timings });
         return swapToNext(pot, decision, held);
       }
       if (cents(r.price) !== cents(price)) {
         await d.from("candidates").update({ price: r.price, offer_url: r.url }).eq("id", pick.id);
-        await say(pot.id, "prebuy_price", `Price moved from ${money(price)} to ${money(r.price)}. Still fits.`);
+        await say(pot.id, "prebuy_price", `Price moved from ${money(price)} to ${money(r.price)}. Still fits.`, { timings });
         price = r.price;
-      } else await say(pot.id, "prebuy_ok", `Good news, it's still in stock at ${pick.retailer ?? "the shop"} for ${money(price)}.`);
+      } else await say(pot.id, "prebuy_ok", `Good news, it's still in stock at ${pick.retailer ?? "the shop"} for ${money(price)}.`, { timings });
     } else if (r.status === "gone") {
-      await say(pot.id, "prebuy_moved", `${short(pick.title)} isn't listed any more. Moving to the next pick.`);
+      await say(pot.id, "prebuy_moved", `${short(pick.title)} isn't listed any more. Moving to the next pick.`, { timings });
       return swapToNext(pot, decision, held);
     } else {
-      await say(pot.id, "prebuy_skip", pot.is_demo ? "This is a demo, so I'm using the price I found earlier." : "Couldn't re-check the shop just now, so I'm going with the price I saw.");
+      await say(pot.id, "prebuy_skip", pot.is_demo ? "This is a demo, so I'm using the price I found earlier." : "Couldn't re-check the shop just now, so I'm going with the price I saw.", { timings });
     }
 
     // 2. Hold checks.

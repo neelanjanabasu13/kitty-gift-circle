@@ -68,7 +68,7 @@ function HealthPage() {
             {Object.entries(res.secrets).map(([k, v]) => <Row key={k} label={k} ok={v} detail={v ? "connected" : "missing"} plain />)}
             <Row label="Database" ok={res.database.ok} detail={res.database.error} />
             <Row label="PayPal sandbox token" ok={res.token.ok} detail={res.token.error} />
-            <Row label="Channel3 test search (GB)" ok={res.shop.ok} detail={res.shop.ok ? `${res.shop.offers} in-stock GBP offers from UK shops across ${res.shop.products} products` : res.shop.error} />
+            <Row label="Channel3 test search (GB)" ok={res.shop.ok} detail={res.shop.ok ? `${res.shop.summary}${res.shop.examples?.length ? ` (e.g. ${res.shop.examples.join(", ")})` : ""}` : res.shop.error} />
             <Row label="Lovable AI" ok={res.ai.ok} detail={res.ai.error} />
             <Row label={`Test hold order (1.00 ${res.currency})`} ok={res.order.ok} detail={res.order.id ? `${res.order.id} · ${res.order.status}` : res.order.error} />
           </ul>
