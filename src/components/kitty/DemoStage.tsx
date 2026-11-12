@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Check, ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, SkipForward, ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { KittyMascot, PAYPAL_BLUES, type MascotState } from "./KittyMascot";
-import { Logo, PayPalWordmark } from "./Logo";
+import { PayPalWordmark } from "./Logo";
 import { CountUp } from "./PotMeter";
 import { formatMoney } from "@/lib/kitty";
 import { DEMO_CAST, DEMO_TARGET, DEMO_TOTAL, type DemoPerson } from "@/lib/demoScript";
@@ -43,6 +44,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
 
   const at = sceneAt(elapsed);
   const restart = () => { setElapsed(0); setPlaying(true); };
+  const jump = (act: number) => { const i = SCENES.findIndex((x) => x.act === DEMO_ACTS[act]!.id); setElapsed(sceneStart(i)); setPlaying(true); };
   const next = () => setElapsed(at ? sceneStart(at.index + 1) : DEMO_TOTAL_MS);
   const actIdx = at ? DEMO_ACTS.findIndex((a) => a.id === at.scene.act) : DEMO_ACTS.length;
   const order = finalOrder(picks);
@@ -54,8 +56,8 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
     <MotionConfig reducedMotion="user">
       <div className="flex min-h-[100dvh] flex-col overflow-x-hidden">
         <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 pt-4 md:px-8 md:pt-6">
-          <div className="shrink-0"><Logo /></div>
-          <ActBar elapsed={elapsed} actIdx={actIdx} />
+          <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full pr-2 text-[14px] font-medium text-foreground hover:text-held"><ArrowLeft className="size-4" aria-hidden /> Back to Kitty</Link>
+          <ActBar elapsed={elapsed} actIdx={actIdx} onJump={jump} />
         </header>
 
         <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-4 px-5 py-4 md:grid-cols-[280px_minmax(0,1fr)] md:gap-10 md:px-8">
@@ -69,7 +71,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
               </div>
               <div className="min-w-0">
                 <AnimatePresence mode="wait" initial={false}>
-                  <motion.div key={stageKey} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.35, ease: EASE }} className="min-h-[360px] md:min-h-[440px]">
+                  <motion.div key={stageKey} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18, ease: EASE }} className="min-h-[360px] md:min-h-[440px]">
                     <SceneView id={at!.scene.id} t={at!.t} picks={order} />
                   </motion.div>
                 </AnimatePresence>
@@ -85,11 +87,15 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
         </main>
 
         <footer className="mx-auto flex w-full max-w-6xl items-center justify-center gap-2 px-5 pb-6 md:justify-end md:px-8">
-          <Button variant="quiet" size="tap" onClick={() => setPlaying((p) => !p)} disabled={ended} aria-label={playing ? "Pause" : "Play"}>
-            {playing ? <><Pause /> Pause</> : <><Play /> Play</>}
-          </Button>
-          <Button variant="quiet" size="tap" onClick={restart}><RotateCcw /> Restart</Button>
-          <Button variant="outline" size="icon" className="size-11" onClick={next} disabled={ended} aria-label="Next scene"><ArrowRight /></Button>
+          <TooltipProvider delayDuration={300}>
+            <Tip label={playing ? "Pause the story" : "Carry on playing"}>
+              <Button variant="quiet" size="tap" onClick={() => setPlaying((p) => !p)} disabled={ended}>
+                {playing ? <><Pause /> Pause</> : <><Play /> Play</>}
+              </Button>
+            </Tip>
+            <Tip label="Start again from the first chip-in"><Button variant="quiet" size="tap" onClick={restart}><RotateCcw /> Restart</Button></Tip>
+            <Tip label="Skip to the next scene"><Button variant="outline" size="tap" onClick={next} disabled={ended}><SkipForward /> Next scene</Button></Tip>
+          </TooltipProvider>
         </footer>
       </div>
     </MotionConfig>
@@ -104,7 +110,11 @@ function chippedRaised(t: number) {
   return n ? RUNNING[n - 1]! : 0;
 }
 
-function ActBar({ elapsed, actIdx }: { elapsed: number; actIdx: number }) {
+function Tip({ label, children }: { label: string; children: ReactNode }) {
+  return <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>;
+}
+
+function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; onJump: (i: number) => void }) {
   return (
     <div className="relative ml-2 min-w-0 flex-1 pb-5" aria-label={`Act ${Math.min(actIdx + 1, 5)} of 5`}>
       <div className="mx-6 h-[3px] overflow-hidden rounded-full bg-muted">
@@ -112,9 +122,12 @@ function ActBar({ elapsed, actIdx }: { elapsed: number; actIdx: number }) {
       </div>
       <ol className="absolute top-[-3px] right-6 left-6 flex justify-between">
         {DEMO_ACTS.map((a, i) => (
-          <li key={a.id} className="flex flex-col items-center gap-1" style={{ width: 0 }}>
-            <span className={`size-[9px] rounded-full border-2 ${i <= actIdx ? "border-held bg-held" : "border-border bg-card"}`} />
-            <span className={`hidden whitespace-nowrap text-[11px] sm:block ${i === actIdx ? "font-medium text-foreground" : "text-muted-foreground"}`}>{a.label}</span>
+          <li key={a.id} className="flex justify-center" style={{ width: 0 }}>
+            <button type="button" onClick={() => onJump(i)} aria-current={i === actIdx ? "step" : undefined} aria-label={`Jump to ${a.label}`}
+              className="-mt-[14px] flex min-h-11 flex-col items-center justify-start gap-1 px-1 pt-[14px]">
+              <span className={`rounded-full border-2 transition-all ${i === actIdx ? "size-[11px] border-held bg-held ring-4 ring-held/20" : i < actIdx ? "size-[9px] border-held bg-held" : "size-[9px] border-border bg-card"}`} />
+              <span className={`whitespace-nowrap text-[10px] sm:text-[11px] ${i === actIdx ? "font-semibold text-held-ink" : "text-muted-foreground"}`}>{a.label}</span>
+            </button>
           </li>
         ))}
       </ol>

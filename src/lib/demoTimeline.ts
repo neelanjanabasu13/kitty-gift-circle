@@ -6,7 +6,7 @@ import type { DemoPick } from "./demoPicks";
 export type DemoAct = "chip" | "shop" | "vote" | "split" | "wrapped";
 export const DEMO_ACTS: { id: DemoAct; label: string }[] = [
   { id: "chip", label: "Chip in" },
-  { id: "shop", label: "Kitty shops" },
+  { id: "shop", label: "Shop" },
   { id: "vote", label: "Vote" },
   { id: "split", label: "Split" },
   { id: "wrapped", label: "Wrapped" },
@@ -15,20 +15,20 @@ export const DEMO_ACTS: { id: DemoAct; label: string }[] = [
 export type SceneId = "chip" | "shop50" | "shop100" | "vote" | "veto" | "bars" | "rows" | "ribbon" | "card" | "receipt";
 export type Scene = { id: SceneId; act: DemoAct; ms: number; caption: string };
 
-export const CHIP_LEAD_MS = 1500;
-export const CHIP_GAP_MS = 2000;
+export const CHIP_LEAD_MS = 200;
+export const CHIP_GAP_MS = 1200;
 
 export const SCENES: Scene[] = [
-  { id: "chip", act: "chip", ms: CHIP_LEAD_MS + DEMO_CAST.length * CHIP_GAP_MS + 500, caption: "Everyone chips in with a hold, not a charge." },
-  { id: "shop50", act: "shop", ms: 8000, caption: "At £50, Kitty browses real shops for Priya." },
-  { id: "shop100", act: "shop", ms: 7000, caption: "At £100 he reshuffles. Bigger gifts unlock." },
-  { id: "vote", act: "vote", ms: 9000, caption: "Six of nine vote. Every penny still counts." },
-  { id: "veto", act: "vote", ms: 7000, caption: "Last chance to swap or veto. Then he buys." },
-  { id: "bars", act: "split", ms: 5000, caption: "The gift costs less than the pot holds." },
-  { id: "rows", act: "split", ms: 8000, caption: "You're only charged your share. The rest is released." },
-  { id: "ribbon", act: "wrapped", ms: 4000, caption: "Kitty ties it up with a PayPal blue bow." },
-  { id: "card", act: "wrapped", ms: 7000, caption: "Everyone's messages, signed into one card." },
-  { id: "receipt", act: "wrapped", ms: 5000, caption: "Paid by PayPal. Nobody fronted a penny." },
+  { id: "chip", act: "chip", ms: CHIP_LEAD_MS + DEMO_CAST.length * CHIP_GAP_MS + 400, caption: "Everyone chips in with a hold, not a charge." },
+  { id: "shop50", act: "shop", ms: 7000, caption: "At £50, Kitty browses real shops for Priya." },
+  { id: "shop100", act: "shop", ms: 6000, caption: "At £100 he reshuffles. Bigger gifts unlock." },
+  { id: "vote", act: "vote", ms: 8000, caption: "Six of nine vote. Every penny still counts." },
+  { id: "veto", act: "vote", ms: 6000, caption: "Last chance to swap or veto. Then he buys." },
+  { id: "bars", act: "split", ms: 4000, caption: "The gift costs less than the pot holds." },
+  { id: "rows", act: "split", ms: 7000, caption: "You're only charged your share. The rest is released." },
+  { id: "ribbon", act: "wrapped", ms: 3800, caption: "Kitty ties it up with a PayPal blue bow." },
+  { id: "card", act: "wrapped", ms: 6000, caption: "Everyone's messages, signed into one card." },
+  { id: "receipt", act: "wrapped", ms: 4000, caption: "Paid by PayPal. Nobody fronted a penny." },
 ];
 
 export const DEMO_TOTAL_MS = SCENES.reduce((s, x) => s + x.ms, 0);

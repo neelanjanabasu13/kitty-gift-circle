@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_ACTS, DEMO_TOTAL_MS, SCENES, demoSplit, finalOrder, sceneAt, sceneStart, voteTally } from "./demoTimeline";
+import { CHIP_GAP_MS, CHIP_LEAD_MS, DEMO_ACTS, DEMO_TOTAL_MS, SCENES, demoSplit, finalOrder, sceneAt, sceneStart, voteTally } from "./demoTimeline";
 import { DEMO_HOME_PICKS } from "./demoPicks";
 
 describe("demo stage timeline", () => {
@@ -11,9 +11,13 @@ describe("demo stage timeline", () => {
     const firstIdx = SCENES.map((s) => DEMO_ACTS.findIndex((a) => a.id === s.act));
     expect([...firstIdx].sort((a, b) => a - b)).toEqual(firstIdx);
   });
-  it("runs between 75 and 90 seconds", () => {
-    expect(DEMO_TOTAL_MS).toBeGreaterThanOrEqual(75_000);
-    expect(DEMO_TOTAL_MS).toBeLessThanOrEqual(90_000);
+  it("runs about a minute (55 to 65 seconds)", () => {
+    expect(DEMO_TOTAL_MS).toBeGreaterThanOrEqual(55_000);
+    expect(DEMO_TOTAL_MS).toBeLessThanOrEqual(65_000);
+  });
+  it("first chip-in lands within 300ms and the rest every 1.2s", () => {
+    expect(CHIP_LEAD_MS).toBeLessThanOrEqual(300);
+    expect(CHIP_GAP_MS).toBe(1200);
   });
   it("finds the right scene for a moment and ends after the last", () => {
     expect(sceneAt(0)?.scene.id).toBe("chip");
