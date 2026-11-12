@@ -2,7 +2,7 @@
 // Every transition is a conditional update on the current status, so a replayed tick is a no-op.
 // All money maths lives in ./closing (pure, tested); this file only does I/O and narration.
 import { formatMoney } from "./kitty";
-import { resplit, votePhrase, afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, effectiveDeadline, isDemoHold, reminderDueAt, type VoteWindow } from "./closing";
+import { resplit, votePhrase, afterCapture, clockTime, proportionalRefund, holdAction, isVoteClosed, pickWinner, proRata, shouldClose, voteClosesAt, vetoMs, effectiveDeadline, scaleMs, isDemoHold, reminderDueAt, type VoteWindow } from "./closing";
 import { OCCASIONS } from "./config";
 
 const HELD = ["authorized", "reauthorized"];
@@ -125,9 +125,13 @@ async function closeIfDue(pot: any, now: Date) {
   if (pot.close_search_at && now.getTime() - new Date(pot.close_search_at).getTime() < 10 * 60_000) return;
   await (await admin()).from("pots").update({ close_search_at: now.toISOString() }).eq("id", pot.id);
 
-  await setWorking(pot.id, `Closing the pot at ${money(raised)}. Running a final search...`);
-  const { finalSearch } = await import("./agent.server");
-  await finalSearch(pot.id, raised);
+  // The final search runs once per pot, ever.
+  const { count: searchedAlready } = await (await admin()).from("agent_events").select("id", { count: "exact", head: true }).eq("pot_id", pot.id).eq("kind", "final_search");
+  if (!searchedAlready) {
+    await setWorking(pot.id, `Closing the pot at ${money(raised)}. Running a final search...`);
+    const { finalSearch } = await import("./agent.server");
+    await finalSearch(pot.id, raised);
+  }
   const picks = (await rankedPicks(pot.id, raised)).slice(0, 3);
   if (!picks.length) {
     await say(pot.id, "close_waiting", `The pot's closed at ${money(raised)} but I haven't found a gift that fits yet. I'll keep looking. Every hold is still only held.`);
@@ -536,10 +540,32 @@ export async function voidAllAndCancel(potId: string) {
 }
 
 /** Pots the cron should look at. */
+/** Open pots whose next action is due now. Demo pots older than 2 hours are left alone. */
 export async function duePots() {
   const d = await admin();
-  const { data } = await d.from("pots").select("id, status, deadline_at").in("status", ["collecting", "voting", "veto", "buying"]).limit(200);
-  return (data ?? []).map((p) => p.id);
+  const now = Date.now();
+  const { data } = await d.from("pots").select("id, status, created_at, deadline_at, target_amount, demo_speed, demo_factor, is_demo, reminders_enabled, vote_closes_at, vote_window").in("status", ["collecting", "voting", "veto", "buying"]).limit(500);
+  const open = (data ?? []).filter((p) => !(p.is_demo && now - new Date(p.created_at).getTime() > 2 * 3600_000));
+  const ids: string[] = [];
+  const collecting = open.filter((p) => p.status === "collecting");
+  const { data: held } = collecting.length ? await d.from("contributions").select("pot_id, amount").in("pot_id", collecting.map((p) => p.id)).in("status", HELD) : { data: [] as any[] };
+  const raised = new Map<string, number>();
+  for (const c of held ?? []) raised.set(c.pot_id, (raised.get(c.pot_id) ?? 0) + Number(c.amount));
+  const vetoIds = open.filter((p) => p.status === "veto").map((p) => p.id);
+  const { data: decs } = vetoIds.length ? await d.from("decisions").select("pot_id, buy_at, vetoed_at").in("pot_id", vetoIds) : { data: [] as any[] };
+  for (const p of open) {
+    if (p.status === "buying") ids.push(p.id);
+    else if (p.status === "voting") { if (p.vote_window === "all_in" || !p.vote_closes_at || new Date(p.vote_closes_at).getTime() <= now) ids.push(p.id); }
+    else if (p.status === "veto") {
+      const live = (decs ?? []).filter((x) => x.pot_id === p.id && !x.vetoed_at);
+      if (!live.length || live.some((x) => x.buy_at && new Date(x.buy_at).getTime() <= now)) ids.push(p.id);
+    } else {
+      const deadline = effectiveDeadline(new Date(p.created_at), new Date(p.deadline_at), p).getTime();
+      const nudgeDue = p.reminders_enabled && now >= deadline - scaleMs(24 * 3600_000, p);
+      if (deadline <= now || cents(raised.get(p.id) ?? 0) >= cents(Number(p.target_amount)) || nudgeDue) ids.push(p.id);
+    }
+  }
+  return ids;
 }
 
 // ---------- fixed split: no search, no vote, straight to the countdown once full ----------

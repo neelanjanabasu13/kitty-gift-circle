@@ -1,6 +1,6 @@
 import { NotFoundPage, PotErrorPage, PotSkeleton } from "@/components/kitty/States";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Lock, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -125,6 +125,15 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
   const chips = amountChips(target, expected);
   const suggested = suggestedAmount(target, expected);
   const [amount, setAmount] = useState<number>(suggested);
+  // PayPal's script loads only when its block nears the screen or someone taps an amount, never on first paint.
+  const [paypalWanted, setPaypalWanted] = useState(false);
+  const paypalSlot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (paypalWanted || !paypalSlot.current) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setPaypalWanted(true); }, { rootMargin: "400px" });
+    io.observe(paypalSlot.current);
+    return () => io.disconnect();
+  }, [paypalWanted]);
   const [custom, setCustom] = useState("");
   const [visibility, setVisibility] = useState<(typeof VIS)[number]["value"]>("named");
   const [displayName, setDisplayName] = useState("");
@@ -144,11 +153,11 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
         <p className="text-[15px] font-medium">How much?</p>
         <div className="flex flex-wrap gap-2">
           {chips.map((c) => (
-            <Chip key={c} selected={!custom && amount === c} onClick={() => { setAmount(c); setCustom(""); }} tag={c === suggested ? "suggested" : undefined}>
+            <Chip key={c} selected={!custom && amount === c} onClick={() => { setAmount(c); setCustom(""); setPaypalWanted(true); }} tag={c === suggested ? "suggested" : undefined}>
               <span className="tabular">{formatMoney(c, currency)}</span>
             </Chip>
           ))}
-          <Input value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full text-center tabular" aria-label="Custom amount" />
+          <Input value={custom} onChange={(e) => { setCustom(e.target.value.replace(/[^0-9.]/g, "")); setPaypalWanted(true); }} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full text-center tabular" aria-label="Custom amount" />
         </div>
       </section>
 
@@ -206,6 +215,11 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
           <div className="space-y-2" aria-label="Placing your hold">
             <div className="h-12 rounded-[12px] shimmer" />
             <p className="text-center text-[14px] text-muted-foreground">Placing your hold with PayPal...</p>
+          </div>
+        ) : !paypalWanted ? (
+          <div ref={paypalSlot} className="space-y-2" aria-busy="true" aria-label="Loading PayPal">
+            <div className="h-12 rounded-full shimmer" />
+            <div className="h-12 rounded-full shimmer" />
           </div>
         ) : (
           <PayPalHold

@@ -25,7 +25,7 @@ export function useTick(view: PotView | null | undefined) {
   useEffect(() => {
     if (!slug || !status || !ACTIVE.includes(status)) return;
     const run = async () => {
-      if (running.current) return;
+      if (running.current || document.visibilityState !== "visible") return;
       running.current = true;
       try {
         await tickPot({ data: { slug } });
@@ -36,6 +36,8 @@ export function useTick(view: PotView | null | undefined) {
     };
     void run();
     const every = setInterval(run, 30_000);
+    const onVis = () => { if (document.visibilityState === "visible") void run(); };
+    document.addEventListener("visibilitychange", onVis);
     let due: ReturnType<typeof setTimeout> | undefined;
     if (dueAt) {
       const ms = new Date(dueAt).getTime() - Date.now() + 1500;
@@ -43,6 +45,7 @@ export function useTick(view: PotView | null | undefined) {
     }
     return () => {
       clearInterval(every);
+      document.removeEventListener("visibilitychange", onVis);
       if (due) clearTimeout(due);
     };
   }, [slug, status, dueAt, qc]);

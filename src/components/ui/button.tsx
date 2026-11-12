@@ -17,6 +17,7 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         // Kitty primary: ink fill, one per screen
+        paypal: "rounded-full bg-held font-medium text-primary-foreground shadow-[0_6px_20px_-6px_color-mix(in_oklab,var(--held)_60%,transparent)] transition-all duration-200 hover:bg-held-deep active:translate-y-px active:scale-[0.98] active:bg-held-deep",
         ink: "bg-primary text-primary-foreground btn-highlight rounded-[12px] font-medium transition-all duration-200 hover:-translate-y-px active:translate-y-0",
         // Kitty secondary: white with hairline
         quiet: "surface rounded-[12px] font-medium text-foreground transition-all duration-200 hover:-translate-y-px hover:border-foreground/20",

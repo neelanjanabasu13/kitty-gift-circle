@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PayPalWordmark, TopBar } from "@/components/kitty/Logo";
 import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
@@ -54,7 +54,10 @@ function Landing() {
               <ArrowUp className="size-5" />
             </button>
           </motion.form>
-          <LiveDemoButton />
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <LiveDemoButton />
+          </div>
+          <p className="mx-auto mt-3 max-w-md text-[13px] text-muted-foreground">An 80-second story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
         </section>
 
         <LiveDemo step={step} />
@@ -145,9 +148,8 @@ function LiveDemo({ step }: { step: number }) {
 
 function LiveDemoButton() {
   return (
-    <div className="mt-5">
-      <Button asChild variant="outline" size="tap"><Link to="/demo">Try live demo</Link></Button>
-      <p className="mt-2 text-[13px] text-muted-foreground">An 80-second story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
-    </div>
+    <Button asChild variant="paypal" size="tap" className="px-6">
+      <Link to="/demo" preload="intent"><Play className="fill-current" /> Try live demo</Link>
+    </Button>
   );
 }
