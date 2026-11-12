@@ -12,7 +12,6 @@ import { PotLive } from "@/components/kitty/PotLive";
 import { Cancelled, buyLine } from "@/components/kitty/Stages";
 import { MoneyBanner } from "@/components/kitty/MoneyBanner";
 import { potQuery, useLivePot } from "@/components/kitty/usePot";
-import { DemoStoryBar } from "@/components/kitty/DemoStoryBar";
 import { cancelPot, resetDemoPot, runKittyNow, seedDemoPot, setDemoSpeed } from "@/lib/kitty.functions";
 import { CommissionNote } from "@/components/kitty/PickCard";
 import { ReminderCard } from "@/components/kitty/ReminderCard";
@@ -128,7 +127,6 @@ function ManagePage() {
           </div>
         </div>
 
-        {pot.is_demo && <DemoStoryBar slug={slug} adminToken={t} status={pot.status} chipped={data.contributors.filter((c) => c.seeded).length} />}
         <MoneyBanner events={data.events} currency={pot.currency} />
         {cancelled && <Cancelled />}
         {pot.status === "done" && data.receipt?.gift && (

@@ -8,7 +8,7 @@ import { AgentFeed, type AgentLine } from "@/components/kitty/AgentFeed";
 import { KittyMascot, type MascotState } from "@/components/kitty/KittyMascot";
 import { PotMeter } from "@/components/kitty/PotMeter";
 import { PickCard } from "@/components/kitty/PickCard";
-import { seedDemoPot } from "@/lib/kitty.functions";
+import { DEMO_HOME_PICKS } from "@/lib/demoPicks";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -92,12 +92,7 @@ function Landing() {
 }
 
 // ---------- Looping demo: chip-ins arrive, meter fills, picks re-rank, Kitty narrates ----------
-// Real Channel3 results Kitty found for a demo pot for Priya (titles, shops, prices and photos as returned by the search).
-const PICKS = [
-  { id: "a", title: "Staub Stoneware Rectangular Baking Dish Set", retailer: "zwilling.com", category: "Cooking", price: 119, image_url: "https://cdn.trychannel3.com/29b30fea-41c4-49b9-aeef-ca1eacc7e737?aid=01M75QZ23Z86H372V10PYA0DEC&mid=YaG3", reason: "Staub combines durable ceramics with Priya's passion for cooking." },
-  { id: "b", title: "Small Planter", retailer: "fable.com", category: "Plants", price: 69, image_url: "https://cdn.trychannel3.com/c7a0f97d-a83e-4ecd-8ff3-cdd1270ec26a?aid=01M75S7B9SPATWM80NBFGAB6R1&mid=mr5p", reason: "Priya likes ceramics and this minimalist planter adds warmth to any desk." },
-  { id: "c", title: "Vintage Adjustable Book Stand Wooden", retailer: "debenhams.com", category: "Books", price: 43.99, image_url: "https://cdn.trychannel3.com/e7011f5c-c677-48df-92fa-421d49e65c7d?aid=01M75BFKYA7580F4AZVE37RC8K&mid=j49J", reason: "Somewhere to prop her cookbooks open on the counter." },
-];
+const PICKS = DEMO_HOME_PICKS;
 const SCRIPT: { raised: number; people: number; line: string; kind: string; order: string[]; working: string; mascot: MascotState }[] = [
   { raised: 72, people: 6, kind: "pot_created", mascot: "idle", line: "Sam set up a kitty for Priya. Noted: she loves cooking, ceramics and coffee.", order: ["b", "c", "a"], working: "Settling in" },
   { raised: 87, people: 7, kind: "contribution_held", mascot: "chipIn", line: "Jo just chipped in £15. That gets us to £87.", order: ["b", "c", "a"], working: "Counting it in" },
@@ -149,26 +144,10 @@ function LiveDemo({ step }: { step: number }) {
 }
 
 function LiveDemoButton() {
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const start = async () => {
-    setBusy(true); setErr(null);
-    try {
-      const r = await seedDemoPot({ data: {} });
-      try {
-        const store = JSON.parse(localStorage.getItem("kitty:admin") || "{}");
-        store[r.slug] = r.adminToken;
-        localStorage.setItem("kitty:admin", JSON.stringify(store));
-      } catch { /* ignore */ }
-      navigate({ to: "/k/$slug/manage", params: { slug: r.slug }, search: { t: r.adminToken } });
-    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't open the live demo."); setBusy(false); }
-  };
   return (
     <div className="mt-5">
-      <Button variant="outline" size="tap" onClick={start} disabled={busy}>{busy ? "Opening Priya's pot..." : err ? "Try again" : "Watch Kitty live with a demo pot"}</Button>
-      <p className="mt-2 text-[13px] text-muted-foreground">A three-minute story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
-      {err && <p role="alert" className="mt-2 text-[14px]">{err}</p>}
+      <Button asChild variant="outline" size="tap"><Link to="/demo">Try live demo</Link></Button>
+      <p className="mt-2 text-[13px] text-muted-foreground">An 80-second story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
     </div>
   );
 }

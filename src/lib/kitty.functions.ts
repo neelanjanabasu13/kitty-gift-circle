@@ -916,3 +916,35 @@ export const advanceDemo = createServerFn({ method: "POST" })
     const r = await tickPot(pot.id);
     return { stage: demoStage(r.status === "busy" ? pot.status : r.status, chipped), chipped, people: DEMO_CAST.length, total: DEMO_TOTAL };
   });
+
+/**
+ * Three real Channel3 gifts already saved for Priya demo pots, one per kind of gift, for the /demo stage.
+ * Read once on page load; returns [] when there aren't three different kinds, so the stage uses its saved fallback.
+ */
+export const getDemoPicks = createServerFn({ method: "GET" }).handler(async () => {
+  const { giftFamily } = await import("./scoring");
+  const db = await admin();
+  const { data: pots } = await db.from("pots").select("id").eq("is_demo", true).order("created_at", { ascending: false }).limit(20);
+  const ids = (pots ?? []).map((p) => p.id);
+  if (!ids.length) return [];
+  const { data } = await db
+    .from("candidates")
+    .select("id, title, retailer, category, price, image_url, reason, rank")
+    .in("pot_id", ids)
+    .not("rank", "is", null)
+    .not("image_url", "is", null)
+    .lte("price", DEMO_TOTAL)
+    .gte("price", 30)
+    .order("rank", { ascending: true })
+    .limit(200);
+  const out: { id: string; title: string; retailer: string; category: string; price: number; image_url: string; reason: string }[] = [];
+  const seen = new Set<string>();
+  for (const c of data ?? []) {
+    const fam = giftFamily(c.category);
+    if (seen.has(fam) || !c.retailer || !c.image_url) continue;
+    seen.add(fam);
+    out.push({ id: c.id, title: c.title, retailer: c.retailer, category: c.category ?? "Gift", price: Number(c.price), image_url: c.image_url, reason: c.reason ?? "" });
+    if (out.length === 3) break;
+  }
+  return out.length === 3 ? out : [];
+});
