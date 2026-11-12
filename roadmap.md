@@ -4,3 +4,4 @@
 - [x] Visual /demo stage (five acts, client-side, about 80s) replacing the manage-page story bar
 - [x] Cat-only demo actions: replay each chip-in, browse and choose gifts, count and release coins, tie ribbon; verify motion and tests
 - [x] Verify visible box drops, early released coins, cat-led wrapping and the 63-second story
+- [x] Land released coins on contributor rows and verify larger gravity-driven confetti

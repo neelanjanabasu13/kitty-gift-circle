@@ -137,11 +137,11 @@ const TAIL = {
   high: "M66 160 C40 150 34 120 44 98 C52 80 46 66 34 60",
 };
 
-export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false, items }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean; items?: string[] }) {
-  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} items={items} />;
+export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false, items, externalRelease = false }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean; items?: string[]; externalRelease?: boolean }) {
+  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} items={items} externalRelease={externalRelease} />;
 }
 
-function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink, items }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean; items: string[] | undefined }) {
+function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink, items, externalRelease }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean; items: string[] | undefined; externalRelease: boolean }) {
   const reduce = !!useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const grad = `rb-${uid}`;
@@ -343,7 +343,7 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             return <path data-ribbon-pull d={`M109 128 Q${g.x - 20} ${g.y + 26} ${g.x} ${g.y}`} fill="none" stroke={`url(#${grad})`} strokeWidth={8} strokeLinecap="round" />;
           })()}
 
-          {s === "counting" && <g aria-hidden>
+          {s === "counting" && !externalRelease && <g aria-hidden>
             {[0, 1, 2, 3].map((i) => {
               const start = 1050 + i * 150;
               const slide = reduce ? 1 : Math.max(0, Math.min(1, (actionMs - start) / 900));
@@ -385,26 +385,11 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
           </motion.g>
 
           {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
-          {s === "buying" && !reduce && <WrappingConfetti ms={clockMs} />}
+          {s === "buying" && !reduce && <Suspense fallback={null}><Confetti once ms={clockMs - 900} colors={[...PAYPAL_BLUES, KRAFT, INK]} /></Suspense>}
         </motion.svg>
       </AnimatePresence>
     </span>
   );
-}
-
-/** Burst from Kitty's own bow, with gravity and a 440px desktop spread. */
-function WrappingConfetti({ ms }: { ms: number }) {
-  const u = Math.max(0, Math.min(1, (ms - 900) / 2000));
-  if (ms < 900 || u >= 1) return null;
-  const colors = [...PAYPAL_BLUES, KRAFT, INK];
-  return <g data-wrapping-confetti aria-hidden>{Array.from({ length: 48 }, (_, i) => {
-    const angle = (i / 48) * Math.PI * 2;
-    const vx = Math.cos(angle) * (240 + (i % 5) * 9);
-    const vy = -100 + Math.sin(angle) * 95;
-    const x = 109 + vx * u;
-    const y = 128 + vy * u + 155 * u * u;
-    return <rect key={i} x={x - 4} y={y - 3} width={6 + i % 4} height={8} rx={1} fill={colors[i % colors.length]} opacity={u < 0.85 ? 1 : (1 - u) / 0.15} transform={`rotate(${u * (360 + i * 13)} ${x} ${y})`} />;
-  })}</g>;
 }
 
 /** A gift photo on a white card with a soft shadow, centred on (x, y); 50 units = 64px+ at 260px. */

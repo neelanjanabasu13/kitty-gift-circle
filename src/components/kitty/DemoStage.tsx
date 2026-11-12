@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Check, SkipForward, ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,9 @@ const MASCOT: Record<SceneId, MascotState> = {
 export function DemoStage({ picks }: { picks: DemoPick[] }) {
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const mascotRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
   const ended = elapsed >= DEMO_TOTAL_MS;
 
   useEffect(() => {
@@ -57,7 +60,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="flex min-h-[100dvh] flex-col overflow-x-hidden">
+      <div ref={stageRef} className="relative flex min-h-[100dvh] flex-col overflow-x-hidden">
         <header className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 pt-4 md:px-8 md:pt-6">
           <Link to="/" className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full pr-2 text-[14px] font-medium text-foreground hover:text-held"><ArrowLeft className="size-4" aria-hidden /> Back to Kitty</Link>
           <ActBar elapsed={elapsed} actIdx={actIdx} onJump={jump} />
@@ -68,14 +71,14 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
             <div className="md:col-span-2"><EndScreen onAgain={restart} /></div>
           ) : (
             <>
-              <div className={at?.scene.id === "ribbon" ? "flex justify-center" : "flex justify-center md:justify-start"}>
+              <div ref={mascotRef} className={at?.scene.id === "ribbon" ? "flex justify-center" : "flex justify-center md:justify-start"}>
                 <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
-                  items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
+                  externalRelease items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
               </div>
               <div className={at?.scene.id === "ribbon" ? "min-w-0 md:col-span-2" : "min-w-0"}>
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div key={stageKey} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.18, ease: EASE }} className={at?.scene.id === "ribbon" ? "" : "min-h-[360px] md:min-h-[440px]"}>
-                    <SceneView id={at!.scene.id} t={at!.t} picks={order} />
+                    <SceneView id={at!.scene.id} t={at!.t} picks={order} rowRefs={rowRefs} />
                   </motion.div>
                 </AnimatePresence>
                 <AnimatePresence mode="wait" initial={false}>
@@ -88,6 +91,7 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
             </>
           )}
         </main>
+        {at?.scene.id === "rows" && <ReleasedCoins t={at.t} stageRef={stageRef} mascotRef={mascotRef} rowRefs={rowRefs} />}
 
         <footer className="mx-auto flex w-full max-w-6xl items-center justify-center gap-2 px-5 pb-6 md:justify-end md:px-8">
           <TooltipProvider delayDuration={300}>
@@ -138,14 +142,14 @@ function ActBar({ elapsed, actIdx, onJump }: { elapsed: number; actIdx: number; 
   );
 }
 
-function SceneView({ id, t, picks }: { id: SceneId; t: number; picks: DemoPick[] }) {
+function SceneView({ id, t, picks, rowRefs }: { id: SceneId; t: number; picks: DemoPick[]; rowRefs: RefObject<(HTMLLIElement | null)[]> }) {
   switch (id) {
     case "chip": return <ChipScene t={t} />;
     case "shop50": case "shop100": return <ShopScene phase={id} t={t} picks={picks} />;
     case "vote": return <VoteScene t={t} picks={picks} />;
     case "veto": return <VetoScene t={t} pick={picks[0]!} />;
     case "bars": return <BarsScene t={t} price={picks[0]!.price} />;
-    case "rows": return <RowsScene t={t} price={picks[0]!.price} />;
+    case "rows": return <RowsScene t={t} price={picks[0]!.price} rowRefs={rowRefs} />;
     case "ribbon": return <RibbonScene t={t} />;
     case "card": return <CardScene t={t} />;
     case "receipt": return <ReceiptScene pick={picks[0]!} />;
@@ -383,7 +387,7 @@ function BarsScene({ t, price }: { t: number; price: number }) {
   );
 }
 
-function RowsScene({ t, price }: { t: number; price: number }) {
+function RowsScene({ t, price, rowRefs }: { t: number; price: number; rowRefs: RefObject<(HTMLLIElement | null)[]> }) {
   const lines = demoSplit(price);
   const paid = lines.reduce((s, l) => s + Math.round(l.paid * 100), 0) / 100;
   const rel = lines.reduce((s, l) => s + Math.round(l.released * 100), 0) / 100;
@@ -394,7 +398,7 @@ function RowsScene({ t, price }: { t: number; price: number }) {
           const flipped = t > 500 + i * 550;
           const hide = l.person.visibility === "amount_hidden";
           return (
-            <li key={i} className="flex min-h-[38px] items-center gap-2 px-3 py-1 md:min-h-[42px]">
+            <li key={i} ref={(el) => { rowRefs.current[i] = el; }} data-contributor-row={i} className="flex min-h-[38px] items-center gap-2 px-3 py-1 md:min-h-[42px]">
               <Avatar p={l.person} className="size-6 text-[11px]" />
               <span className="flex-1 truncate text-[13px] md:text-[14px]">{who(l.person)}</span>
               <span className="flex gap-1">
@@ -418,6 +422,48 @@ function RowsScene({ t, price }: { t: number; price: number }) {
       </p>
     </div>
   );
+}
+
+/** One stage-coordinate overlay crosses the column boundary and adapts to stacked phone rows. */
+function ReleasedCoins({ t, stageRef, mascotRef, rowRefs }: { t: number; stageRef: RefObject<HTMLDivElement | null>; mascotRef: RefObject<HTMLDivElement | null>; rowRefs: RefObject<(HTMLLIElement | null)[]> }) {
+  const reduce = useReducedMotion();
+  const [points, setPoints] = useState<{ source: { x: number; y: number }; targets: { x: number; y: number }[] } | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const stage = stageRef.current?.getBoundingClientRect();
+      const cat = mascotRef.current?.querySelector("svg")?.getBoundingClientRect();
+      const rows = rowRefs.current.slice(0, 4);
+      if (!stage || !cat || rows.length < 4 || rows.some((r) => !r)) return;
+      setPoints({ source: { x: cat.left - stage.left + cat.width * 109 / 200, y: cat.top - stage.top + cat.height * 124 / 200 }, targets: rows.flatMap((row) => {
+        if (!row) return [];
+        const r = row.getBoundingClientRect();
+        return [{ x: r.left - stage.left + 28, y: r.top - stage.top + r.height / 2 }];
+      }) });
+    };
+    // The outgoing scene crossfades before the contributor rows mount.
+    const interval = setInterval(measure, 100);
+    const observer = new ResizeObserver(measure);
+    if (stageRef.current) observer.observe(stageRef.current);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    measure();
+    return () => { clearInterval(interval); observer.disconnect(); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [stageRef, mascotRef, rowRefs]);
+  if (reduce || !points) return null;
+  return <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible" aria-hidden data-release-overlay>
+    {points.targets.map((target, i) => {
+      const local = t - 1050 - i * 150;
+      if (local < 0 || local > 1080) return null;
+      const u = Math.min(1, local / 900);
+      const x = points.source.x + (target.x - points.source.x) * u;
+      const y = points.source.y + (target.y - points.source.y) * u - Math.sin(Math.PI * u) * 35;
+      return <g key={i} data-release-target={i} data-destination={`${target.x},${target.y}`} transform={`translate(${x} ${y})`} opacity={local <= 900 ? 1 : 1 - (local - 900) / 180}>
+        <circle r={17} fill="var(--foreground)" stroke="var(--held)" strokeWidth={3} />
+        <circle r={11} fill="var(--kraft)" />
+        <path d="M0 -6 V6" stroke="var(--foreground)" strokeWidth={2.5} strokeLinecap="round" />
+      </g>;
+    })}
+  </svg>;
 }
 
 // ---------- Act 5: wrapped ----------
