@@ -94,7 +94,10 @@ function ContributorPage() {
               <h1 className="text-[44px] md:text-[56px]">Chip in for <em>{pot.recipient_name}</em>.</h1>
               <p className="text-[16px] text-muted-foreground">You're only charged if the gift happens. {pot.organiser_name} is organising.</p>
             </div>
-            <PotMeter raised={data.raised} target={pot.target_amount} currency={pot.currency} people={data.people} footer={<Deadline at={pot.deadline_at} />} />
+            <div className="flex items-center gap-4">
+              <PotKitty people={data.people} />
+              <div className="min-w-0 flex-1"><PotMeter raised={data.raised} target={pot.target_amount} currency={pot.currency} people={data.people} footer={<Deadline at={pot.deadline_at} />} /></div>
+            </div>
             {topPicks(data).length > 0 && (
               <section className="space-y-3">
                 <p className="text-[15px] font-medium">Kitty's picks so far</p>
@@ -299,4 +302,21 @@ function Success({ mine, currency, canWithdraw, onWithdrawn, name }: { mine: Min
       )}
     </motion.section>
   );
+}
+
+/** Kitty beside the pot meter: idles, and catches a coin once each time a new chip-in lands. */
+function PotKitty({ people }: { people: number }) {
+  const seen = useRef(people);
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    if (people > seen.current) {
+      setBeat((b) => b + 1);
+      const id = setTimeout(() => setBeat(0), 1800);
+      seen.current = people;
+      return () => clearTimeout(id);
+    }
+    seen.current = people;
+    return undefined;
+  }, [people]);
+  return <KittyMascot state={beat ? "chipIn" : "idle"} beat={beat} size={160} className="shrink-0 !size-[120px] sm:!size-[160px] [&_svg]:!size-full" label={beat ? "Kitty caught a new chip-in" : "Kitty minding the pot"} />;
 }

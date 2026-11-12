@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useId, useState, lazy, Suspense } from "react";
+import { useEffect, useId, useMemo, useState, lazy, Suspense } from "react";
 import { AnimatePresence, motion, useReducedMotion, useSpring } from "motion/react";
 const Confetti = lazy(() => import("./MascotConfetti"));
 
@@ -33,12 +33,17 @@ const ARM: Record<MascotState, { a: number; b: number }> = {
   cancelled: { a: -130, b: 0 },
 };
 
-type Prop = "giftA" | "giftB" | "coin" | "card" | "camera" | "pan" | "candle" | "chocs";
+type Prop = "giftA" | "giftB" | "coin" | "card" | "camera" | "pan" | "candle" | "chocs" | "thumb0" | "thumb1" | "thumb2";
+const GOLD = "#C9A27E";
+/** A big, readable coin: ink disc, kraft-gold face, PayPal-blue ring (r 14 = 36px+ at 260px). */
+function Coin({ cx, cy }: { cx: number; cy: number }) {
+  return <g><circle cx={cx} cy={cy} r={14} fill={INK} stroke={PAYPAL_BLUES[1]} strokeWidth={3} /><circle cx={cx} cy={cy} r={9} fill={GOLD} /><path d={`M${cx} ${cy - 5} V${cy + 5}`} stroke={INK} strokeWidth={2.4} strokeLinecap="round" /></g>;
+}
 // Little things Kitty handles. Drawn in forearm space so they travel with the glove.
-const PROPS: Record<Prop, React.ReactNode> = {
+const PROPS: Partial<Record<Prop, React.ReactNode>> = {
   giftA: (<g><rect x={123} y={106} width={15} height={14} rx={1.5} fill={KRAFT} stroke={INK} strokeWidth={1.5} /><path d="M130.5 106 V120" stroke={PAYPAL_BLUES[1]} strokeWidth={2.4} /></g>),
   giftB: (<g><path d="M124 108 H136 V119 C136 121 124 121 124 119 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M136 110 C140 110 140 116 136 116" fill="none" stroke={INK} strokeWidth={1.5} /></g>),
-  coin: (<g><circle cx={131} cy={115} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.5} /><path d="M131 112 V118" stroke={INK} strokeWidth={1.2} strokeLinecap="round" /></g>),
+  coin: <Coin cx={131} cy={110} />,
   camera: (<g><rect x={122} y={108} width={18} height={12} rx={2} fill={INK} stroke={INK} strokeWidth={1.2} /><path d="M125 108 V105.5 H130 V108" fill={INK} /><path d="M131 110.5 A3.6 3.6 0 1 1 130.9 110.5 Z" fill={PAPER} stroke={INK} strokeWidth={1.2} /><path d="M136 110 H138.5" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
   pan: (<g><path d="M121 110 H139 V116 C139 120 121 120 121 116 Z" fill={INK} /><path d="M118 111 H121 M139 111 H142" stroke={INK} strokeWidth={2.4} strokeLinecap="round" /><path d="M120 108.5 C124 106 136 106 140 108.5" fill="none" stroke={INK} strokeWidth={1.6} strokeLinecap="round" /><path d="M128 108 H132" stroke={PAPER} strokeWidth={1.2} strokeLinecap="round" /></g>),
   candle: (<g><path d="M124 109 H137 V120 C137 121.5 124 121.5 124 120 Z" fill={PAPER} stroke={INK} strokeWidth={1.5} /><path d="M124 112 H137" stroke={KRAFT_DEEP} strokeWidth={1.4} /><path d="M130.5 109 V106" stroke={INK} strokeWidth={1} /><path d="M130.5 99.5 C132.5 102 132.5 104.5 130.5 105.5 C128.5 104.5 128.5 102 130.5 99.5 Z" fill={PAYPAL_BLUES[1]} /></g>),
@@ -71,10 +76,14 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   // Count the takings: dip into the box, lift a coin to admire it, drop it back.
   idle: { dur: 8, times: [0, 0.55, 0.65, 0.75, 0.88, 1], a: [0, 0, 20, -45, -45, 0], b: [0, 0, 10, -60, -60, 0],
     props: [{ k: "coin", o: [0, 0, 0, 1, 1, 0] }] },
-  // Catch the coin, show it off, pop it in the box.
-  chipIn: { dur: 1.2, once: true, hold: true, times: [0, 0.2, 0.4, 0.64, 0.85, 1],
-    a: [-90, -90, -100, 12, 12, -8], b: [-70, -70, -100, 12, 12, -6], head: [0, -3, -9, 5, 5, 0],
-    props: [{ k: "coin", o: [0, 1, 1, 1, 0, 0] }] },
+  // Dip, reach up and catch the coin arcing in, glance at it, drop it in the box, settle.
+  chipIn: { dur: 1.6, once: true, hold: true, times: [0, 0.12, 0.3, 0.42, 0.55, 0.72, 0.84, 1],
+    a: [12, 22, -95, -102, -84, 12, 20, 12], b: [12, 18, -95, -106, -92, 12, 16, 12], head: [0, 4, -8, -11, -6, 5, 1, 0],
+    props: [{ k: "coin", o: [0, 0, 1, 1, 1, 0, 0, 0] }] },
+  // Winner: dip, catch the gift flying in from its card, present it, lower it into the box.
+  vote: { dur: 1.8, once: true, hold: true, times: [0, 0.14, 0.36, 0.48, 0.62, 0.8, 0.9, 1],
+    a: [12, 22, -72, -80, -62, 12, 20, 12], b: [12, 16, -40, -50, -36, 12, 14, 12], head: [0, 3, -6, -9, -4, 6, 2, 0],
+    props: [{ k: "thumb0", o: [0, 0, 1, 1, 1, 0, 0, 0] }] },
   // Three measured taps build a neat stack, then the surplus is pushed right.
   counting: { dur: 4.8, hold: true, times: [0, 0.08, 0.18, 0.25, 0.33, 0.43, 0.5, 0.58, 0.68, 0.75, 0.84, 0.92, 1],
     a: [12, -72, -35, 12, -72, -35, 12, -72, -35, -35, -60, -60, 12],
@@ -93,8 +102,23 @@ const ACTS: Partial<Record<MascotState, Act>> = {
   veto: { dur: 3, times: [0, 0.5, 0.6, 0.7, 0.8, 1], a: [-22, -22, -8, -22, -8, -22], b: [-10, -10, 4, -10, 4, -10] },
   // Wrapping: pull the ribbon down, loop it over, tug it tight.
   buying: { dur: 3.8, once: true, times: [0, 0.26, 0.52, 0.68, 0.76, 0.9, 1],
-    a: [12, -58, -95, -40, -50, -50, 12], b: [12, 35, 45, 65, 50, 50, 12], head: [0, 0, -4, 0, 0, 12, 0] },
+    a: [12, -58, -95, -40, -50, -50, 12], b: [12, 35, 45, 65, 50, 50, 12], head: [0, 0, -4, 0, 0, 24, 0] },
 };
+
+/** Where the glove is in view space for a shoulder (a) and elbow (b) angle, so flying items land in it. */
+function rot(x: number, y: number, ox: number, oy: number, deg: number) {
+  const r = (deg * Math.PI) / 180, c = Math.cos(r), n = Math.sin(r);
+  return { x: ox + (x - ox) * c - (y - oy) * n, y: oy + (x - ox) * n + (y - oy) * c };
+}
+function glovePos(a: number, b: number) {
+  const e = rot(131, 112, 124, 106, b);
+  return rot(e.x, e.y, 112, 86, a);
+}
+/** Arc from a start point into the glove, with a little lift in the middle. */
+function arcTo(from: { x: number; y: number }, to: { x: number; y: number }, u: number, lift = 46) {
+  const e = u * u * (3 - 2 * u);
+  return { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e - Math.sin(Math.PI * u) * lift };
+}
 
 function sample(values: number[], times: number[], phase: number) {
   let i = 0;
@@ -113,11 +137,11 @@ const TAIL = {
   high: "M66 160 C40 150 34 120 44 98 C52 80 46 66 34 60",
 };
 
-export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean }) {
-  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} />;
+export function KittyMascot({ state = "idle", beat, fill = 0, size = 72, className, label, wink: forceWink = false, items }: { state?: MascotState; beat?: number; fill?: number; size?: number; className?: string | undefined; label?: string; wink?: boolean; items?: string[] }) {
+  return <KittyAction key={`${state}-${beat ?? "loop"}`} state={state} beat={beat} fill={fill} size={size} className={className} label={label} wink={forceWink} items={items} />;
 }
 
-function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean }) {
+function KittyAction({ state: s, beat, fill, size, className, label, wink: forceWink, items }: { state: MascotState; beat: number | undefined; fill: number; size: number; className: string | undefined; label: string | undefined; wink: boolean; items: string[] | undefined }) {
   const reduce = !!useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const grad = `rb-${uid}`;
@@ -136,7 +160,17 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
     : s === "cancelled" ? TAIL.low
     : R([TAIL.s3, TAIL.s1, TAIL.s3], TAIL.s3);
   const ribbonOn = s !== "cancelled";
-  const act = reduce || (s === "chipIn" && beat === 0) ? undefined : ACTS[s];
+  const thumbs = items?.slice(0, 3) ?? [];
+  const itemKey = thumbs.join("|");
+  // With real gift photos, Kitty browses and chooses those thumbnails instead of drawn items.
+  const act = useMemo<Act | undefined>(() => {
+    if (reduce || ((s === "chipIn" || s === "vote") && !beat)) return undefined;
+    if (s === "vote" && !thumbs.length) return undefined;
+    if (s === "searching" && thumbs.length) { const b = browse(thumbs.map((_, i) => `thumb${i}` as Prop)); return { ...b, dur: thumbs.length * 1.6 }; }
+    const base = ACTS[s];
+    if (s === "ranking" && base && thumbs.length > 1) return { ...base, props: [{ k: "thumb1", o: base.props![0]!.o }, { k: "thumb0", o: base.props![1]!.o }] };
+    return base;
+  }, [reduce, s, beat, itemKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Which held prop is visible, driven by a clock on the same timeline as the arm keyframes.
   const [phase, setPhase] = useState(0);
   const shoulder = useSpring(act?.a[0] ?? arm.a, LIMB);
@@ -153,7 +187,8 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
       shoulder.set(sample(act.a, act.times, p));
       elbow.set(sample(act.b, act.times, p));
       head.set(sample(act.head ?? (s === "searching" ? browseHead(act) : act.a.map(() => 0)), act.times, p));
-      tail.set(sample(act.a, act.times, Math.max(0, p - 0.035)) / 16);
+      // Tail leads: it reads the pose slightly ahead of the arm.
+      tail.set(sample(act.a, act.times, act.once ? Math.min(1, p + 0.05) : (p + 0.05) % 1) / 16);
     }, 1000 / 60);
     return () => clearInterval(id);
   }, [act, beat, s, shoulder, elbow, head, tail]);
@@ -164,6 +199,9 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
     if (act.hold) return o[i] === 1;
     return o[i] === 1 && (o[i + 1] ?? o[i]) === 1 ? true : o[i] === 1 && phase - (act.times[i] ?? 0) < ((act.times[i + 1] ?? 1) - (act.times[i] ?? 0)) / 2;
   };
+
+  // Box rim squashes and springs back when something lands in it.
+  const rimBump = !act ? 0 : s === "chipIn" ? sample([0, 0, 1, -0.4, 0], [0, 0.7, 0.76, 0.86, 1], phase) : s === "vote" ? sample([0, 0, 1, -0.4, 0], [0, 0.78, 0.84, 0.92, 1], phase) : 0;
 
   return (
     <span className={className} style={{ display: "inline-block", width: size, height: size }} role="img" aria-label={label ?? `Kitty, ${describe(s)}`}>
@@ -177,6 +215,8 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
               <stop offset="55%" stopColor={PAYPAL_BLUES[1]} />
               <stop offset="100%" stopColor={PAYPAL_BLUES[2]} />
             </linearGradient>
+            <filter id={`sh-${uid}`} x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.5" floodColor="#141210" floodOpacity="0.28" /></filter>
+            {thumbs.map((_, i) => <clipPath key={i} id={`th-${uid}-${i}`}><rect x={110} y={79} width={42} height={42} rx={4} /></clipPath>)}
           </defs>
 
           {/* Tail leads the motion: it moves first, limbs follow a beat later. */}
@@ -236,12 +276,12 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
                 transition={s === "cancelled" ? loop(1.3) : t(LIMB)}>
                 <path d="M124 106 L130 124" stroke={INK} strokeWidth={6.5} strokeLinecap="round" />
                 {/* props held in the glove */}
-                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`} data-held-item={pr.k} transform={`translate(131 115) rotate(${-shoulder.get() - elbow.get()}) scale(${pr.k === "coin" ? 1 : 1.55}) translate(-131 -115)`}>{PROPS[pr.k]}</g> : null)}
+                {act?.props?.map((pr, i) => propOn(pr.o) ? <g key={`${s}-${i}`} data-held-item={pr.k} transform={`translate(131 115) rotate(${-shoulder.get() - elbow.get()}) scale(${pr.k === "coin" || pr.k.startsWith("thumb") ? 1 : 2.2}) translate(-131 -115)`}>{pr.k.startsWith("thumb") ? <Thumb href={thumbs[Number(pr.k.slice(5))] ?? ""} uid={uid} i={Number(pr.k.slice(5))} x={131} y={100} /> : PROPS[pr.k]}</g> : null)}
                 {/* white glove */}
                 <path d="M126 122 C126 118 134 118 135 122 C138 123 138 127 135 128.5 C134 132 127 132 126 128.5 C123.5 127 123.5 123.5 126 122 Z" fill={PAPER} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
                 <path d="M128.5 124.5 L132.5 124.5 M128 127 L133 127" stroke={INK} strokeWidth={0.9} strokeLinecap="round" opacity={0.6} />
                 {/* ballot card presented with a flourish */}
-                {s === "vote" && (
+                {s === "vote" && !act && (
                   <motion.g initial={{ opacity: 0, rotate: -30 }} animate={{ opacity: 1, rotate: 0 }} transition={t(SNAP)}
                     style={{ originX: "131px", originY: "122px", transformBox: "view-box" }}>
                     <path d="M126 96 H146 V120 H126 Z" fill={PAPER} stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
@@ -261,27 +301,28 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
 
           {s === "counting" && <g aria-hidden>
             {Array.from({ length: reduce ? 3 : Math.min(3, Math.floor(phase / 0.25)) }).map((_, i) => (
-              <ellipse key={i} cx={149} cy={123 - i * 3} rx={8} ry={3} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.2} />
+              <ellipse key={i} cx={150} cy={124 - i * 5} rx={12} ry={4.5} fill={GOLD} stroke={INK} strokeWidth={1.6} />
             ))}
           </g>}
 
           {/* Box */}
-          <rect x={58} y={128} width={102} height={54} rx={5} fill={KRAFT} stroke={INK} strokeWidth={2} />
-          <path d="M58 138 L160 138" stroke={KRAFT_DEEP} strokeWidth={1.2} opacity={0.5} />
+          <g transform={`translate(109 182) scale(${1 + 0.03 * rimBump} ${1 - 0.07 * rimBump}) translate(-109 -182)`}>
+            <rect x={58} y={128} width={102} height={54} rx={5} fill={KRAFT} stroke={INK} strokeWidth={2} />
+            <path d="M58 138 L160 138" stroke={KRAFT_DEEP} strokeWidth={1.2} opacity={0.5} />
+          </g>
           <motion.rect x={102} y={128} width={14} height={54} fill={`url(#${grad})`}
             style={{ originX: "109px", originY: "128px", transformBox: "view-box" }}
             initial={false}
             animate={{ scaleY: ribbonOn ? (s === "buying" ? R([0, 1], 1) : 1) : 0, opacity: ribbonOn ? 1 : 0 }}
             transition={s === "buying" ? t({ duration: 0.9, ease: SILK, repeat: beat === undefined ? Infinity : 0, repeatDelay: 2.9 }) : t({ duration: 0.9, ease: SILK })} />
 
-          {s === "buying" && <path d="M58 146 H160" stroke={`url(#${grad})`} strokeWidth={8} pathLength={1}
+          {s === "buying" && <path d="M58 146 H160" stroke={`url(#${grad})`} strokeWidth={10} pathLength={1}
             strokeDasharray="1 1" strokeDashoffset={reduce ? 0 : 1 - Math.min(1, phase / 0.26)} />}
 
           {s === "counting" && <g aria-hidden>
             {[0, 1, 2].map((i) => {
               const slide = reduce ? 1 : Math.max(0, Math.min(1, (phase - 0.76 - i * 0.025) / 0.16));
-              return <motion.ellipse key={i} cx={149} cy={123 - i * 3} rx={7} ry={3} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.2}
-                animate={{ x: slide * (27 + i * 6), y: slide * (24 + i * 3), opacity: reduce || phase > 0.76 ? 1 : 0 }} transition={t(LIMB)} />;
+              return <motion.g key={i} animate={{ x: slide * (58 + i * 22), y: slide * (18 + i * 16), opacity: reduce || phase > 0.76 ? 1 : 0 }} transition={t(LIMB)}><Coin cx={150} cy={124} /></motion.g>;
             })}
           </g>}
 
@@ -296,18 +337,9 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             )}
           </AnimatePresence>
 
-          {/* Coin dropping in (chip-in) */}
-          <AnimatePresence>
-            {s === "chipIn" && !reduce && beat !== 0 && (
-              <motion.g key="coin" initial={{ y: -90, opacity: 0 }}
-                animate={{ y: [-50, 0, 0], opacity: [1, 1, 0] }}
-                transition={{ duration: 0.24, times: [0, 0.85, 1], ease: "easeOut", repeat: beat === undefined ? Infinity : 0, repeatDelay: 0.96 }}>
-                <circle cx={124} cy={64} r={6} fill={KRAFT_DEEP} stroke={INK} strokeWidth={1.8} />
-                <path d="M124 60 V68" stroke={INK} strokeWidth={1.4} strokeLinecap="round" />
-              </motion.g>
-            )}
-          </AnimatePresence>
-
+          {/* Coin arcing in from the contributor card (chip-in) and the winning gift flying in (vote) */}
+          {act && s === "chipIn" && phase < 0.3 && (() => { const g = glovePos(-95, -95); const c = arcTo({ x: 225, y: 30 }, g, phase / 0.3); return <Coin cx={c.x} cy={c.y} />; })()}
+          {act && s === "vote" && phase < 0.36 && thumbs[0] && (() => { const g = glovePos(-72, -40); const c = arcTo({ x: 250, y: 70 }, { x: g.x, y: g.y - 12 }, phase / 0.36, 30); return <Thumb href={thumbs[0]} uid={uid} i={0} x={c.x} y={c.y} />; })()}
           {/* Bow: snaps tight when buying, bounces when done, unties when cancelled */}
           <motion.g style={{ originX: "109px", originY: "128px", transformBox: "view-box" }} initial={false}
             animate={
@@ -326,10 +358,21 @@ function KittyAction({ state: s, beat, fill, size, className, label, wink: force
             <path d="M104.5 124.5 H113.5 V131.5 H104.5 Z" fill={`url(#${grad})`} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
           </motion.g>
 
-          {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, "#C9A27E"]} /></Suspense>}
+          {s === "done" && !reduce && <Suspense fallback={null}><Confetti colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
+          {s === "buying" && !reduce && phase > 0.66 && <Suspense fallback={null}><Confetti once colors={[...PAYPAL_BLUES, GOLD, "#141210"]} /></Suspense>}
         </motion.svg>
       </AnimatePresence>
     </span>
+  );
+}
+
+/** A gift photo on a white card with a soft shadow, centred on (x, y); 50 units = 64px+ at 260px. */
+function Thumb({ href, uid, i, x, y }: { href: string; uid: string; i: number; x: number; y: number }) {
+  return (
+    <g transform={`translate(${x - 131} ${y - 100})`}>
+      <rect x={106} y={75} width={50} height={50} rx={6} fill={PAPER} stroke="#E8E2D9" strokeWidth={1} filter={`url(#sh-${uid})`} />
+      <image href={href} x={110} y={79} width={42} height={42} preserveAspectRatio="xMidYMid slice" clipPath={`url(#th-${uid}-${i})`} />
+    </g>
   );
 }
 

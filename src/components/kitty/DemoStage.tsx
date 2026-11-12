@@ -66,8 +66,8 @@ export function DemoStage({ picks }: { picks: DemoPick[] }) {
           ) : (
             <>
               <div className="flex justify-center md:justify-start">
-                <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
-                  className="!size-[120px] md:!size-[260px] [&_svg]:!size-full" />
+                <KittyMascot state={at ? MASCOT[at.scene.id] : "idle"} beat={at?.scene.id === "chip" ? chippedCount(at.t) : at?.scene.id === "vote" ? (at.t > 6800 ? 1 : 0) : at?.index ?? 0} fill={Math.min(1, raised / DEMO_TARGET)} size={260}
+                  items={order.map((p) => p.image_url)} className="!size-[180px] sm:!size-[260px] [&_svg]:!size-full" />
               </div>
               <div className="min-w-0">
                 <AnimatePresence mode="wait" initial={false}>
