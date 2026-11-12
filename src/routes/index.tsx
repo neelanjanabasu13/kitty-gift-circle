@@ -57,7 +57,7 @@ function Landing() {
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
             <LiveDemoButton />
           </div>
-          <p className="mx-auto mt-3 max-w-md text-[13px] text-muted-foreground">An 80-second story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
+          <p className="mx-auto mt-3 max-w-md text-[13px] text-muted-foreground">A one-minute story: nine people chip in, some vote, and Kitty buys Priya's gift, releasing what's left over. No real money moves.</p>
         </section>
 
         <LiveDemo step={step} />

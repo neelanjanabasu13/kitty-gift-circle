@@ -73,7 +73,7 @@ function StartPage() {
   const [idx, setIdx] = useState(search.name ? 1 : 0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const who = name.trim() || "them";
+  const who = name.trim() ? cap(name.trim()) : "them";
   const targetNum = Number(target) || 0;
   const share = suggestedAmount(targetNum, expected);
   const occLabel = OCCASIONS.find((o) => o.value === occasion)?.label;
@@ -145,7 +145,7 @@ function StartPage() {
   };
 
   const summary: Record<StepId, string> = {
-    name: name.trim(),
+    name: cap(name.trim()),
     occasion: occLabel ?? "",
     closeness: closeLabel ?? "",
     mode: knowsGift ? (product ? product.title.slice(0, 40) : "I've got a link") : "Kitty chooses",
@@ -197,7 +197,7 @@ function StartPage() {
     try {
       const res = await createPot({
         data: {
-          recipient_name: name.trim(),
+          recipient_name: cap(name.trim()),
           occasion: occasion!,
           closeness: closeness!,
           likes,
@@ -244,12 +244,12 @@ function StartPage() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-8">
+      <main className="mx-auto w-full max-w-2xl px-5">
         {/* Answered so far */}
-        <ul className="space-y-3 pt-4">
+        <ul className="space-y-2 pt-4">
           {done.map((s) => (
             <motion.li key={s} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[13px] text-muted-foreground">{question[s]}</span>
+              <span className="text-[13px] text-muted-foreground">{REVIEW_LABEL[s]}</span>
               <button type="button" onClick={() => setIdx(steps.indexOf(s))} className="inline-flex min-h-9 max-w-full items-center gap-1.5 truncate rounded-full border bg-card px-3 text-[13px] hover:border-foreground/30">
                 {summary[s]} <Pencil className="size-3 text-muted-foreground" />
               </button>
@@ -294,9 +294,9 @@ function StartPage() {
       {/* Composer: answers live here, sticky on mobile */}
       <form
         onSubmit={(e) => { e.preventDefault(); step === "review" ? submit() : next(); }}
-        className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur"
+        className="w-full pb-16"
       >
-        <div className="mx-auto max-w-2xl space-y-4 px-5 py-4">
+        <div className="mx-auto max-w-2xl space-y-4 px-5 pt-8">
           <AnimatePresence mode="wait">
             <motion.div key={step} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {step === "name" && (
@@ -421,7 +421,7 @@ function TagPicker({ value, onChange, avoid, extra = [] }: { value: string[]; on
   return (
     <div className="max-h-[40vh] space-y-3 overflow-y-auto">
       <div className="flex flex-wrap gap-2">
-        {options.map((t) => <Chip key={t} selected={value.includes(t)} onClick={() => toggle(t)}>{t}</Chip>)}
+        {options.map((t) => <Chip key={t} selected={value.includes(t)} onClick={() => toggle(t)}>{cap(t)}</Chip>)}
         {adding ? (
           <Input autoFocus value={custom} onChange={(e) => setCustom(e.target.value)} onBlur={add} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} placeholder="Type and press Enter" className="h-11 w-48 rounded-full" maxLength={30} />
         ) : (

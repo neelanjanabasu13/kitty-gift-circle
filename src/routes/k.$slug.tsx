@@ -156,7 +156,7 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
               <span className="tabular">{formatMoney(c, currency)}</span>
             </Chip>
           ))}
-          <Input value={custom} onChange={(e) => { setCustom(e.target.value.replace(/[^0-9.]/g, "")); want(); }} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full text-center tabular" aria-label="Custom amount" />
+          <Input value={custom} onChange={(e) => { setCustom(e.target.value.replace(/[^0-9.]/g, "")); want(); }} placeholder="Other" inputMode="decimal" className="h-11 w-24 rounded-full bg-card text-center shadow-none tabular" aria-label="Custom amount" />
         </div>
       </section>
 
@@ -170,8 +170,8 @@ function ChipInForm({ slug, name, currency, target, expected, likes, paypalReady
           <p className="text-[15px] font-medium">What's {name} into?</p>
           {cats.length > 0 ? <button type="button" onClick={() => setCats([])} className="min-h-11 text-[13px] text-muted-foreground">Clear</button> : <span className="text-[13px] text-muted-foreground">Optional, skip if unsure</span>}
         </div>
-        <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
-          {voteOptions.map((c) => <Chip key={c} className="shrink-0" selected={cats.includes(c)} onClick={() => setCats((x) => x.includes(c) ? x.filter((y) => y !== c) : x.length < 5 ? [...x, c] : x)}>{c}</Chip>)}
+        <div className="flex flex-wrap gap-2">
+          {voteOptions.map((c) => <Chip key={c} className="shrink-0" selected={cats.includes(c)} onClick={() => setCats((x) => x.includes(c) ? x.filter((y) => y !== c) : x.length < 5 ? [...x, c] : x)}>{c.charAt(0).toUpperCase() + c.slice(1)}</Chip>)}
         </div>
       </section>
 
